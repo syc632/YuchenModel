@@ -53,7 +53,7 @@ class TestAttnRes(unittest.TestCase):
 class TestStableLatentMoe(unittest.TestCase):
     def setUp(self) -> None:
         torch.manual_seed(23)
-        from model.Moe import MoE
+        from model.Stable_Latent_Moe import MoE
 
         self.cfg = make_tiny_config(use_moe=True)
         self.moe = MoE(self.cfg)

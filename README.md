@@ -86,7 +86,7 @@ MiniModel/
 ├── model/                   # 模型组件
 │   ├── GatedDeltaNet.py     # GDN / GatedDeltaNet
 │   ├── MLA.py               # Multi-head Latent Attention
-│   ├── Moe.py               # Stable Latent MoE
+│   ├── Stable_Latent_Moe.py # Stable Latent MoE
 │   ├── ffn.py               # FFN 与 SwiGLU/SiTUGLU
 │   └── model.py             # 主干模型、AttnRes 和因果语言模型封装
 ├── tokenizer/               # tokenizer 训练脚本

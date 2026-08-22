@@ -6,7 +6,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from dataclasses import dataclass
 from typing import Optional
 
-from .Moe import MoE
+from .Stable_Latent_Moe import MoE
 from .MLA import MLA
 from .GatedDeltaNet import GatedDeltaNet
 from.ffn import SwiGlu,SiTUGLU

@@ -19,14 +19,14 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "model"
 
-# Moe.py currently imports ``ffn`` as a top-level module.  Adding this path is
+# Stable_Latent_Moe.py currently imports ``ffn`` as a top-level module.  Adding this path is
 # test-process-only compatibility glue; it does not modify the model package.
 if str(ROOT) in sys.path:
     sys.path.remove(str(ROOT))
 sys.path.insert(0, str(ROOT))
 
 # Do not put MODEL_DIR on sys.path: without model/__init__.py it would shadow
-# the namespace package as model.py.  Moe.py needs a legacy ``from ffn``
+# the namespace package as model.py.  Stable_Latent_Moe.py needs a legacy ``from ffn``
 # import, so register only that module for this test process.
 if "ffn" not in sys.modules:
     ffn_spec = importlib.util.spec_from_file_location("ffn", MODEL_DIR / "ffn.py")
