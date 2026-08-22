@@ -14,7 +14,7 @@ class Config:
 
 
 
-class DeltaRule(nn.Module):
+class GatedDeltaNet(nn.Module):
     def __init__(self,cfg:Config):
         super().__init__()
         self.n_head = cfg.n_head

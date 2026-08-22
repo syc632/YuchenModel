@@ -257,7 +257,7 @@ class MoE(nn.Module):
         else:
             #推理时使用优化的推理函数
             y = self.moe_infer(x, topk_idx, topk_weight.view(-1, 1)).view(b,l,d)
-            y = self.W_up(self.up_norm(x))
+            y = self.W_up(self.up_norm(y))
         token_mask = padding_mask.unsqueeze(-1)
         identity = identity * token_mask
         for expert in self.shared_expert:

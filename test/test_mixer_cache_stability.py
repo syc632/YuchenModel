@@ -36,17 +36,17 @@ class TestMixerCacheAndStability(unittest.TestCase):
         x = torch.randn(2, 6, self.cfg.d_model)
         self._assert_cached_matches_full(MLA(self.cfg), x, rtol=1e-4, atol=1e-5)
 
-    def test_deltanet_cache_matches_full_sequence(self) -> None:
-        from model.DeltaNet import DeltaRule
+    def test_gated_deltanet_cache_matches_full_sequence(self) -> None:
+        from model.GatedDeltaNet import GatedDeltaNet
 
         x = torch.randn(2, 6, self.cfg.d_model)
-        self._assert_cached_matches_full(DeltaRule(self.cfg), x, rtol=2e-4, atol=2e-5)
+        self._assert_cached_matches_full(GatedDeltaNet(self.cfg), x, rtol=2e-4, atol=2e-5)
 
     def test_mixer_outputs_and_gradients_stay_finite_across_input_scales(self) -> None:
-        from model.DeltaNet import DeltaRule
+        from model.GatedDeltaNet import GatedDeltaNet
         from model.MLA import MLA
 
-        for module_name, module in (("MLA", MLA(self.cfg)), ("DeltaRule", DeltaRule(self.cfg))):
+        for module_name, module in (("MLA", MLA(self.cfg)), ("GatedDeltaNet", GatedDeltaNet(self.cfg))):
             module.train()
             for scale in (1e-3, 1.0, 1e3):
                 x = (torch.randn(2, 5, self.cfg.d_model) * scale).requires_grad_(True)

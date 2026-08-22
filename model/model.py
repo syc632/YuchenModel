@@ -8,7 +8,7 @@ from typing import Optional
 
 from .Moe import MoE
 from .MLA import MLA
-from .DeltaNet import DeltaRule
+from .GatedDeltaNet import GatedDeltaNet
 from.ffn import SwiGlu,SiTUGLU
 
 
@@ -104,7 +104,7 @@ class ModelLayer(nn.Module):
         if mla:
             self.mixer = MLA(cfg)
         else:
-            self.mixer = DeltaRule(cfg)
+            self.mixer = GatedDeltaNet(cfg)
         if cfg.use_moe:
             self.ffn = MoE(cfg)
         else:
