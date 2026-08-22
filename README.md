@@ -1,28 +1,17 @@
 # YuchenModel
 
-一个基于 PyTorch 的轻量级中文因果语言模型实验仓库，重点探索高效序列建模、低秩潜空间表示和稀疏专家结构的组合方式。
+一个轻量级的KimiK3风格语言模型。
 
-当前项目围绕以下架构组件展开：
-
-```text
-BPE Tokenizer
-      ↓
-Embedding
-      ↓
-GDN / MLA 混合主干
-      ↓
-Stable Latent MoE
-      ↓
-AttnRes 跨层残差融合
-      ↓
-LM Head
-```
+项目主要实现:
+1.KDA及其高效硬件算法
+2.Stable Latent MoE
+3.SiTU_GLU
+4.Block Attention Residual
+5.Embedding_gating_MLA
 
 ## 核心架构
 
-### GDN
-
-GDN 模块当前由 `model/GatedDeltaNet.py` 中的 `GatedDeltaNet` 实现，负责高效的序列混合。对比实验和部分测试仍使用 `DeltaRule` 兼容命名。
+### KDA
 
 主要思路包括：
 
@@ -39,8 +28,6 @@ MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的�
 - 将 KV 表示压缩到 latent space，再恢复到多头表示；
 - 对 Q 和 KV 使用独立的 latent projection；
 - 仅对部分 query/key 维度应用 RoPE；
-- 支持 KV cache，用于增量生成；
-- 为长序列和低缓存开销方向的实验提供基础。
 
 ### Stable Latent MoE
 
@@ -57,7 +44,7 @@ MoE 模块位于前馈网络位置，在 latent space 中完成专家路由：
 
 AttnRes 用于跨层残差融合。模型会保存一个周期内的历史 hidden states，并通过可学习查询向量计算各层表示的权重，再进行加权求和。
 
-默认配置中，GDN 与 MLA 按周期交替使用；每个周期结束后可以执行一次 AttnRes 融合。这样可以在保留线性递推混合效率的同时，引入更强的全局信息交互能力。
+默认配置中，KDA 与 MLA 按周期(3:1)交替使用；每个周期结束后可以执行一次 AttnRes 融合。这样可以在保留线性递推混合效率的同时，引入更强的全局信息交互能力。
 
 ## 训练与测试
 
