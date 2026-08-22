@@ -1,39 +1,49 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
+from dataclasses import dataclass
+@dataclass
+class Config:
+    d_model: int = 4
+    n_head: int = 4
+    conv_size: int = 4
+    chunk_size: int = 64
+    d_head: int = 4
+
+
 
 
 
 class DeltaRule(nn.Module):
-    def __init__(self,d_model,n_head,conv_size=4,chunk_size=64):
+    def __init__(self,cfg:Config):
         super().__init__()
-        self.n_head = n_head
-        self.d_model = d_model
-        self.d_head = d_model // n_head
-        self.conv_size = conv_size
-        self.chunk_size =chunk_size
-        assert chunk_size >=2
-        assert conv_size >=2
-        assert d_model%n_head==0
+        self.n_head = cfg.n_head
+        self.d_model = cfg.d_model
+        self.d_head = cfg.d_model // cfg.n_head
+        self.conv_size = cfg.conv_size
+        self.chunk_size =cfg.chunk_size
+        assert cfg.chunk_size >=2
+        assert cfg.conv_size >=2
+        assert cfg.d_model%cfg.n_head==0
 
 
         #qkv短卷积,qkv本身携带的token是独立的qt之来自xt,做一次短卷积让局部的token做一次mixing
-        self.conv_q = nn.Conv1d(d_model,d_model,conv_size,padding=0,groups=d_model,bias=False)
-        self.conv_k = nn.Conv1d(d_model,d_model,conv_size,padding=0,groups=d_model,bias=False)
-        self.conv_v = nn.Conv1d(d_model,d_model,conv_size,padding=0,groups=d_model,bias=False)
+        self.conv_q = nn.Conv1d(cfg.d_model,cfg.d_model,cfg.conv_size,padding=0,groups=cfg.d_model,bias=False)
+        self.conv_k = nn.Conv1d(cfg.d_model,cfg.d_model,cfg.conv_size,padding=0,groups=cfg.d_model,bias=False)
+        self.conv_v = nn.Conv1d(cfg.d_model,cfg.d_model,cfg.conv_size,padding=0,groups=cfg.d_model,bias=False)
 
 
-        self.qkv = nn.Linear(d_model,3*d_model,bias=False)
-        self.beta = nn.Linear(d_model,n_head,bias=False)
-        self.W_o = nn.Linear(d_model,d_model,bias=False)
-        self.in_norm = nn.RMSNorm(d_model)
-        self.out_norm = nn.RMSNorm(d_model)
+        self.qkv = nn.Linear(cfg.d_model,3*cfg.d_model,bias=False)
+        self.beta = nn.Linear(cfg.d_model,cfg.n_head,bias=False)
+        self.W_o = nn.Linear(cfg.d_model,cfg.d_model,bias=False)
+        self.in_norm = nn.RMSNorm(cfg.d_model,eps=1e-5)
+        self.out_norm = nn.RMSNorm(cfg.d_model,eps=1e-5)
         #用于控制S的遗忘速度,数值越大,遗忘的越慢,越小越快
         self.gate_logit_normalizer = 16.0
-        self.alpha = nn.Linear(d_model, n_head, bias=False)
+        self.alpha = nn.Linear(cfg.d_model, cfg.n_head, bias=False)
         #输出门控
-        self.out_gate = nn.Linear(self.d_head,self.d_head, bias=False)
-        self.out_norm = nn.RMSNorm(self.d_head)
+        self.out_gate = nn.Linear(cfg.d_head,cfg.d_head, bias=False)
+        self.out_norm = nn.RMSNorm(cfg.d_head,eps=1e-5)
 
     def causal_short_conv(self, x, conv, state=None,padding_mask=None):
         """
@@ -203,7 +213,6 @@ class DeltaRule(nn.Module):
 
 
 
-
         output = torch.zeros_like(v)
         #块间还是串行计算
         for i in range(n_chunk):
@@ -329,45 +338,5 @@ class DeltaRule(nn.Module):
         output = (output + residual) * token_mask
         return output,cache
 
-class SwiGlu(nn.Module):
-    def __init__(self,d_model,expan):
-        super().__init__()
-        self.d_model = d_model
-        self.W_up = nn.Linear(d_model,expan*d_model,bias=False)
-        self.W_down = nn.Linear(expan*d_model,d_model,bias=False)
-        self.gate = nn.Linear(d_model,expan*d_model)
-        self.act = nn.SiLU()
-        self.norm = nn.RMSNorm(d_model)
-    def forward(self,x):
-        x = self.norm(x)
-        z = x
-        x = self.act(self.W_up(x))
-        gate = self.gate(z)
-        output = x*gate
-        output = self.W_down(output)
-        return output
 
-class DeltaLayer(nn.Module):
-    def __init__(self,cfg):
-        super().__init__()
-        self.deltanet = DeltaRule(cfg.d_model,cfg.n_head,cfg.conv_size,cfg.chunk_size)
-        self.swiglu = SwiGlu(cfg.d_model,cfg.expan)
-        self.norm = nn.RMSNorm(cfg.d_model)
-        self.out_proj = nn.Linear(cfg.d_model,cfg.d_model,bias=False)
-    def forward(self,x,cache=None,padding_mask=None):
-        b,l,_ = x.shape
-        if padding_mask is None:
-            padding_mask = torch.ones((b,l),dtype=torch.bool,device=x.device)
-        else:
-            padding_mask = padding_mask.to(device = x.device,dtype=torch.bool)
-        #b l 1
-        token_mask = padding_mask.unsqueeze(-1)
-        x,cache = self.deltanet(x,cache,padding_mask)
-        residual = x
-        x = self.swiglu(x)
-        #清零padding
-        x = (x + residual) * token_mask
-        x = self.norm(x)
-        x = self.out_proj(x)
-        return x,cache
 

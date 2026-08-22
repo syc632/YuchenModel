@@ -17,7 +17,7 @@ def test_kv_cache_matches_full_attention():
 
     with torch.no_grad():
         # 一次性计算完整序列
-        full_output = model(x, use_cache=False)
+        full_output, _ = model(x)
 
         # 每次输入一个 token，并持续传递 cache
         kv_cache = None
@@ -25,11 +25,7 @@ def test_kv_cache_matches_full_attention():
 
         for t in range(x.size(1)):
             current_x = x[:, t:t + 1, :]
-            output, kv_cache = model(
-                current_x,
-                kv_cache=kv_cache,
-                use_cache=True,
-            )
+            output, kv_cache = model(current_x, cache=kv_cache)
             cached_outputs.append(output)
 
         cached_output = torch.cat(cached_outputs, dim=1)
