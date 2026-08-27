@@ -3,11 +3,16 @@
 一款从0到1训练的超轻量语言模型。
 
 项目主要实现:
-1.KDA及其高效硬件算法
-2.Stable Latent MoE
-3.SiTU_GLU
-4.Block Attention Residual
-5.Embedding_gating_MLA
+1.KDA及其高效硬件算法  
+
+2.Stable Latent MoE  
+
+3.SiTU_GLU  
+
+4.Block Attention Residual  
+
+5.Embedding_gating_MLA  
+
 
 ## 核心架构
 
