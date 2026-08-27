@@ -3,27 +3,27 @@ from contextlib import nullcontext
 import torch
 from model.model import Config
 from pathlib import Path
-from datasets import load_dataset, Features, List, Value
+from datasets import Features, List, Value
 import json
 from transformers import AutoTokenizer
 from dataclasses import dataclass
 from model.model import YuchenModelCausalLLM
-from train_util import *
+from train.train_util import *
 @dataclass
 class SFTConfig:
-    project_dir: Path = Path(r"D:\Kimi")
+    project_dir: Path = Path(r"/")
 
     tokenizer_dir: str = "BPEmodel" #分词器
-    data_file: str = "data/sft_t2t_mini.jsonl" #训练数据
-    checkpoint_dir: str = "sft_model" #检查点目录
-    save_path: str = "sft_model"      #保存路径
+    data_file: str = "..." #训练数据
+    checkpoint_dir: str = "..."  #检查点目录
+    save_path: str = "..."  #保存路径
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 90000
 
     max_length: int = 512
-    batch_size: int = 8
-    accumulation_steps: int = 4
+    batch_size: int = 16
+    accumulation_steps: int = 2
     epochs: int = 1
 
     lr: float = 3e-4
@@ -32,7 +32,7 @@ class SFTConfig:
     weight_decay: float = 0.1
     grad_clip: float = 1.0
 
-    num_workers: int = 2
+    num_workers: int = 8
     seed: int = 42
 
     save_interval: int = 2000
@@ -211,7 +211,7 @@ def build_model(tokenizer,train_config):
 
 
 
-def train_epoch(epoch,auto_cast,model,loader,optimizer,iter,sft_config,wandb=None):
+def train_epoch(epoch,iter,sft_config,wandb=None):
     """
 
     :param epoch: 当前训练轮数
@@ -241,7 +241,7 @@ def train_epoch(epoch,auto_cast,model,loader,optimizer,iter,sft_config,wandb=Non
 
         #3.前向传播(混合精度上下文)
         with auto_cast:
-            res = model(x=input_idx,labels=labels)
+            res = model(input_ids=input_idx,labels=labels)
             loss = res.loss
             #梯度累加,不会导致梯度过大
             loss = loss/sft_config.accumulation_steps
@@ -320,33 +320,27 @@ if __name__ == "__main__":
 
     #模型
     model = build_model(tokenizer, sft_config).to(device=device,dtype=sft_config.dtype)
-    get_model_params(model,sft_config)
+    get_model_params(model,model_config)
     # 加载预训练权重：这里只加载模型参数，不加载预训练的优化器状态
-    pretrained_path = Path(
-        r"/train\attn_res\pretrain_weight_512.pth"
-    )
+    pretrained_path = Path(r"/train/weight/pretrain_weight\pretrain_weight_512_moe.pth")
 
-    state_dict = torch.load(
-        pretrained_path,
-        map_location="cpu",
-        weights_only=True,
-    )
+    state_dict = torch.load(pretrained_path,map_location="cpu",weights_only=True,)
 
     model.load_state_dict(state_dict, strict=True)
 
 
     #训练
     optimizer = torch.optim.AdamW(model.parameters(), lr=sft_config.lr, weight_decay=sft_config.weight_decay)
-    auto_cast = nullcontext if device == "cpu" else torch.amp.autocast(device_type="cuda",dtype=sft_config.dtype)
+    auto_cast = nullcontext() if device == "cpu" else torch.amp.autocast(device_type="cuda",dtype=sft_config.dtype)
 
-    ckp_data = lm_check_point(lm_config=sft_config,weight=sft_config.save_path,optimizer=optimizer) if sft_config.resume else None
+    ckp_data = lm_check_point(lm_config=sft_config,weight="sft_weight",optimizer=optimizer) if sft_config.resume else None
 
     #wandb
     wandb_run = None
     if sft_config.use_wandb:
         wandb_id = ckp_data.get("wandb_id") if ckp_data else None
-        resume = "must" if wandb_id else None
-        wandb_run_name = f"MiniMind-Full-SFT-Epoch-{sft_config.epochs}-BatchSize-{sft_config.batch_size}-LearningRate-{sft_config.lr}"
+        resume = "allow" if wandb_id else None
+        wandb_run_name = f"YuchenModel-Full-SFT-Epoch-{sft_config.epochs}-BatchSize-{sft_config.batch_size}-LearningRate-{sft_config.lr}"
         wandb_run = wandb.init(project = sft_config.project_name,id = wandb_id,name = wandb_run_name,resume = resume)
 
 
@@ -383,17 +377,11 @@ if __name__ == "__main__":
         loader = DataLoader(dataset, batch_sampler=batch_sampler,num_workers=sft_config.num_workers,
                             pin_memory=True,persistent_workers=True,prefetch_factor=4)
 
-        steps_per_epoch = (
-                                  len(dataset) + sft_config.batch_size - 1
-                          ) // sft_config.batch_size
+        steps_per_epoch = (len(dataset) + sft_config.batch_size - 1) // sft_config.batch_size
 
 
         if skip > 0:
             Logger(f'Epoch [{epoch + 1}/{sft_config.epochs}]: 跳过前{start_step}个step，从step {start_step + 1}开始')
-            train_epoch(epoch=epoch,auto_cast=auto_cast,model=model,loader=loader,
-                        optimizer=optimizer,iter=steps_per_epoch,sft_config=sft_config,
-                        wandb=wandb_run)
+            train_epoch(epoch=epoch,iter=steps_per_epoch,sft_config=sft_config,wandb=wandb_run)
         else:
-            train_epoch(epoch=epoch, auto_cast=auto_cast, model=model, loader=loader,
-                        optimizer=optimizer, iter=steps_per_epoch, sft_config=sft_config,
-                        wandb=wandb_run)
+            train_epoch(epoch=epoch,iter=steps_per_epoch, sft_config=sft_config,wandb=wandb_run)

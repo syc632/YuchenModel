@@ -5,19 +5,19 @@ import torch.optim
 
 from model.model import Config
 from model.model import YuchenModelCausalLLM
-from train_util import *
+from train.train_util import *
 import torch.nn as nn
 from SFT import SFTDataSet
 from transformers import AutoTokenizer
 from pathlib import Path
 @dataclass
-class LoraConfig(frozen = True):
-    project_dir: Path = Path(r"D:\Kimi")
+class LoraConfig:
+    project_dir: Path = Path(r"/")
 
     tokenizer_dir: str = "BPEmodel"  # 分词器
-    data_file: str = "data/sft_t2t_mini.jsonl"  # 训练数据
-    checkpoint_dir: str = "lora_model"  # 检查点目录
-    save_path: str = "lora_model"  # 保存路径
+    data_file: str = "..."  # 训练数据
+    checkpoint_dir: str = "..."  # 检查点目录
+    save_path: str = "..."  # 保存路径
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 90000
@@ -45,7 +45,7 @@ class LoraConfig(frozen = True):
     resume: bool = True
 
     use_wandb: bool = True
-    project_name: str = "YuchenModel_sft"
+    project_name: str = "YuchenModel_Lora"
     use_moe: bool = True
     hidden_size: int = 512
     use_compile: bool = True
@@ -84,7 +84,7 @@ class LoraLinear(nn.Module):
         for p in basic_layer.parameters():
             p.requires_grad = False
     def forward(self,x):
-        return self.basic_layer + self.scale*self.W_b(self.W_a(self.dropout(x)))
+        return self.basic_layer(x) + self.scale*self.W_b(self.W_a(self.dropout(x)))
 
 
 def find_lora_model(model:YuchenModelCausalLLM):
@@ -132,7 +132,7 @@ def train_epoch(epoch,auto_cast,model,loader,optimizer:torch.optim.Optimizer,ite
             param["lr"] = lr
 
         with auto_cast:
-            res = model(x=input_ids,labels=labels)
+            res = model(input_ids=input_ids,labels=labels)
             loss = res.loss
             loss = loss/lora_config.accumulation_steps
 
@@ -176,8 +176,8 @@ def train_epoch(epoch,auto_cast,model,loader,optimizer:torch.optim.Optimizer,ite
 
 
 if __name__ == "__main__":
-    model_config = Config
-    lora_config = LoraConfig
+    model_config = Config()
+    lora_config = LoraConfig()
 
 
     set_seed(lora_config.seed)
@@ -197,14 +197,14 @@ if __name__ == "__main__":
     # 调试代码
     # for i in range(10):
     #     input_ids,labels = dataset[i]
-    Logger(f"监督微调数据集大小:{len(dataset) - 1}")
+    Logger(f"Lora数据集大小:{len(dataset) - 1}")
 
     model = YuchenModelCausalLLM(model_config).to(device = lora_config.device,dtype= lora_config.dtype)
 
-    get_model_params(model, lora_config)
+    get_model_params(model, model_config)
 
     sft_path = Path(
-        r"/train\sft_model\sft_weight_512.pth"
+        r"/train/weight/pretrain_weight\pretrain_weight_512_moe.pth"
     )
 
     state_dict = torch.load(sft_path,map_location="cpu")
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     model.load_state_dict(state_dict,strict=True)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lora_config.lr, weight_decay=lora_config.weight_decay)
-    auto_cast = nullcontext if device == "cpu" else torch.amp.autocast(device_type="cuda",dtype=lora_config.dtype)
+    auto_cast = nullcontext() if device == "cpu" else torch.amp.autocast(device_type="cuda",dtype=lora_config.dtype)
 
 
     ckp_data = lm_check_point(lm_config=lora_config,weight=lora_config.save_path,optimizer=optimizer) if lora_config.resume else None
@@ -243,7 +243,7 @@ if __name__ == "__main__":
         skip = start_step if (epoch== start_epoch and start_step>0) else 0
 
 
-        generator = torch.Generator
+        generator = torch.Generator()
         generator.manual_seed(lora_config.seed + epoch)
         sampler = torch.utils.data.RandomSampler(dataset, generator=generator)
 

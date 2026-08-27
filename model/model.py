@@ -9,7 +9,7 @@ from typing import Optional
 from .Stable_Latent_Moe import MoE
 from .MLA import MLA
 from .GatedDeltaNet import GatedDeltaNet
-from.ffn import SwiGlu,SiTUGLU
+from .ffn import SwiGlu,SiTUGLU
 
 
 @dataclass
@@ -74,12 +74,11 @@ class CausalLMOutputWithAuxLoss(CausalLMOutputWithPast):
     lm_loss: Optional[torch.FloatTensor] = None
 
 
-def attn_res(block:list,partial_block,k,norm:nn.RMSNorm,linear:nn.Linear):
+def attn_res(block:list,partial_block,norm:nn.RMSNorm,linear:nn.Linear):
     """
     attn_res就是对模型的层和层之间去做attention计算,然后对层进行加权求和
     :param block: 前面的n层输出的特征向量
     :param partial_block: 当前层内的子层输出的特征向量
-    :param k:
     :param norm: RMS归一化
     :param linear: 伪查询向量,形状为 d 1
     :return:
@@ -108,7 +107,7 @@ class ModelLayer(nn.Module):
         if cfg.use_moe:
             self.ffn = MoE(cfg)
         else:
-            self.ffn = SwiGlu(cfg)
+            self.ffn = SwiGlu(cfg.d_model,cfg.d_inner)
 
     def forward(self,x,cache=None,padding_mask=None):
         b,l,d = x.shape
@@ -198,7 +197,7 @@ class YuchenModel(nn.Module):
             return x,next_cache,total_aux_loss
 
 
-class YuchenModelCausalLLM(nn.Module,GenerationMixin):
+class YuchenModelCausalLLM(nn.Module):
     """
     因果语言模型,面向最终任务(文本生成)的顶层封装
     架构组成:
@@ -219,32 +218,28 @@ class YuchenModelCausalLLM(nn.Module,GenerationMixin):
 
     def forward(
         self,
-        x=None,
         input_ids=None,
         cache=None,
         padding_mask=None,
         attention_mask=None,
         label=None,
         labels=None,
-        use_cache=None,
         logits_to_keep:int=0,
     ):
         """
         没写因果掩码是因为MLA内置了
         :param x:b l
+        :param input_ids: 输入序列
         :param cache: 输入序列
         :param label: 标签(训练时使用) b l
         :param padding_mask: 填充
-        :param use_cache:KV-cache
         :param logits_to_keep: 在推理时候只计算最后一个Token的Logits,避免全量计算
                 0(默认)计算所有token的logits(训练的时候)
                 1:计算最后一个token的logits(推理)
         :return:
         """
-        del use_cache
-        input_ids = input_ids if input_ids is not None else x
         if input_ids is None:
-            raise ValueError("必须传入x或input_ids")
+            raise ValueError("必须传入input_ids")
         labels = labels if labels is not None else label
         padding_mask = attention_mask if attention_mask is not None else padding_mask
         if padding_mask is None:
@@ -291,6 +286,7 @@ class YuchenModelCausalLLM(nn.Module,GenerationMixin):
 
 
 if __name__ == "__main__":
+    x = torch.randn((1,10,512))
     cfg = Config()
     model = YuchenModel(cfg)
-    print(model)
+    print(model(x))

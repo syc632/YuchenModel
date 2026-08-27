@@ -19,7 +19,6 @@ class GatedDeltaNet(nn.Module):
         super().__init__()
         self.n_head = cfg.n_head
         self.d_model = cfg.d_model
-        self.d_head = cfg.d_model // cfg.n_head
         self.conv_size = cfg.conv_size
         self.chunk_size =cfg.chunk_size
         assert cfg.chunk_size >=2
@@ -84,13 +83,14 @@ class GatedDeltaNet(nn.Module):
             #计算有效token的长度,因为规定有效token为1,padding为0,所以相加就会得到有效token的长度
             valid_len = padding_mask.sum(dim=-1)  # [B]
 
-            # 对每个样本取“旧 cache + 有效 token”末尾的 history_len 项
+            # 通过偏移索引去取有效token
+            #seq [1,1,1,0,0,0], valid= 3   x_with_history : [state state state 1 1 1 1 0 0]
+            #indices 3+ [0,1,2] = [3,4,5]
             indices = valid_len[:, None] + torch.arange(
                 history_len, device=x.device
             )[None, :]
-
+            #拓展到d维,所有通道共用一个维度
             indices = indices[:, None, :].expand(-1, x.size(1), -1)
-
 
             next_state = x_with_history.gather(-1, indices)
 
@@ -103,6 +103,12 @@ class GatedDeltaNet(nn.Module):
     def recurrent(self,q,k,v,log_alpha,beta,S):
         """
         用于一次生成一个的递推
+        q: B n_head 1 d_head
+        k: B n_head 1 d_head
+        v: B n_head 1 d_head
+        log_alpha: B 1 n_head
+        beta: B 1 n_head
+        S B n_head d_head d_head
         """
         assert q.size(2) == 1
         q = q.float()
@@ -136,11 +142,10 @@ class GatedDeltaNet(nn.Module):
         q = f.pad(q.float(),(0,0,0,n_padding))
         k = f.pad(k.float(),(0,0,0,n_padding))
         v = f.pad(v.float(),(0,0,0,n_padding))
-        #qkv的形状已经是b n l d,但是α和β的形状是b l n d
+        #qkv的形状已经是b n l d,但是α和β的形状是b l n
         #b n l+n_padding
         g = f.pad(log_alpha.transpose(1,2),(0,n_padding))
         beta = f.pad(beta.transpose(1,2),(0,n_padding))
-
 
 
         pad_len = l + n_padding

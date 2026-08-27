@@ -14,7 +14,7 @@ def train_tokenizer():
 
 
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_path = os.path.join(project_dir, "data", "wiki_zh.jsonl")
+    data_path = os.path.join(project_dir, "data", "...")
     if not os.path.isfile(data_path):
         raise FileNotFoundError(
             f"训练数据不存在: {data_path}\n"

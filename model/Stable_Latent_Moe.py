@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import math
 from dataclasses import dataclass
-from ffn import SwiGlu,SiTUGLU
+from .ffn import SwiGlu,SiTUGLU
 
 
 

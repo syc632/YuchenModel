@@ -134,8 +134,6 @@ def lm_check_point(lm_config,weight:str=None,model=None,optimizer=None,epoch=Non
 
 
 
-
-
 class SkipBatchSimple(Sampler):
     def __init__(self,sampler,batch,skip_batch=0):
         """

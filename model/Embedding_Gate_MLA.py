@@ -100,22 +100,17 @@ class EG_MLA(nn.Module):
 
 
 
-        #cat the historic kv
+        #cat the historic kv and padding
         if cache is not None:
             kv_latent = torch.cat([cache[0], kv_latent_now], dim=1)
+            # 历史token是否为padding是无法从头推导的(forward输入不包含历史token的任何信息),因此需要把padding加入到cache中
+            past_padding_mask =  cache[2]
+            key_padding_mask = torch.cat([past_padding_mask, padding_mask], dim=1)
         else:
             kv_latent = kv_latent_now
-
-        # 旧版 cache 只有两个元素；兼容读取时把历史 token 视为有效。
-        if cache is not None:
-            past_padding_mask = (
-                cache[2]
-                if len(cache) > 2
-                else torch.ones((b,past_len),device=x.device,dtype=torch.bool)
-            )
-            key_padding_mask = torch.cat([past_padding_mask,padding_mask],dim=1)
-        else:
             key_padding_mask = padding_mask
+
+
 
         # Embedding Gate
         eg_gate = self.kv_embd(token_ids)
@@ -154,6 +149,7 @@ class EG_MLA(nn.Module):
         k_pos = torch.arange(total_len, device=x.device).unsqueeze(0)
         # 只让q和q位置以前的k进行计算
         causal_mask = k_pos <= q_pos
+        #&两个位置都为True,结果才是True
         attention_mask = causal_mask.view(1,1,l,total_len) & key_padding_mask.view(b,1,1,total_len)
 
 
@@ -170,6 +166,7 @@ class EG_MLA(nn.Module):
             dropout_p=dropout_p,
         )
         output = output.transpose(1,2).contiguous().view(b,l,-1)
+        #softmax会把padding位置变为非零输出
         output = self.W_o(output)*padding_mask.unsqueeze(-1)
 
         # MLA 只返回 mixing 结果；残差连接由外层 ModelLayer 统一处理。

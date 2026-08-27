@@ -1,7 +1,4 @@
-try:
-    from .train_util import *
-except ImportError:
-    from train_util import *
+from train.train_util import *
 import math
 import json
 from contextlib import nullcontext
@@ -18,12 +15,12 @@ from pathlib import Path
 
 @dataclass
 class TrainConfig:
-    project_dir: Path = Path(r"D:\Kimi")
+    project_dir: Path = Path(r"/")
 
     tokenizer_dir: str = "BPEmodel"
-    data_file: str = "data/pretrain_hq.jsonl"
-    checkpoint_dir: str = "pretrain_weight"
-    save_path: str = "pretrain_weight"
+    data_file: str = "..."
+    checkpoint_dir: str = "..."
+    save_path: str = "..."
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 20_000
@@ -54,7 +51,7 @@ class TrainConfig:
 
     use_wandb: bool = True
     project_name:str = "YuchenModel"
-    use_moe: bool = False
+    use_moe: bool = True
     hidden_size: int = 512
     use_compile: bool = True
 
@@ -160,7 +157,7 @@ def train_epoch(
 
         #进入自动混合精度上下文
         with auto_cast:
-            res = model(x=input_ids,labels=labels)
+            res = model(input_ids=input_ids,labels=labels)
             #模型内部已经把aux_loss按系数加入loss,这里不再重复相加
             loss = res.loss/config.accumulation_steps
 

@@ -7,7 +7,7 @@ ROOT = Path(r"D:\Kimi")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "train"))
 
-from SFT import SFTConfig, build_model
+from train.mid_train.SFT import SFTConfig, build_model
 
 # 1. 加载 tokenizer 和模型
 tokenizer = AutoTokenizer.from_pretrained(ROOT / "BPEmodel")
