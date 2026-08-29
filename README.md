@@ -3,8 +3,9 @@
 一款从0到1训练的超轻量语言模型。
 
 项目主要实现:  
+一.架构
 
-1.KDA及其高效硬件算法  
+1.GDN及其分块并行算法
 
 2.Stable Latent MoE  
 
@@ -13,6 +14,18 @@
 4.Block Attention Residual  
 
 5.Embedding_gating_MLA  
+
+6.DeepSeekSpareAttention
+
+7.mamba2
+
+二.训练
+
+1.pretrain
+
+2.midtrain:Lora + 全参微调
+
+3.posttrain: On Policy Distillation
 
 
 ## 核心架构
@@ -92,4 +105,14 @@ MiniModel/
 └── loss-landscape/          # loss landscape 实验工具
 ```
 
+
+##待办事项
+
+1.更新笔记
+
+2.更换Aux_loss为QB
+
+3.对比横向对比各个组件
+
+4.消融实验
 
