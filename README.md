@@ -15,9 +15,13 @@
 
 5.Embedding_gating_MLA  
 
-6.DeepSeekSpareAttention
+6.Nope MLA
 
-7.mamba2
+7.MLA
+
+8.DeepSeekSpareAttention
+
+9.mamba2
 
 二.训练
 
@@ -30,7 +34,7 @@
 
 ## 核心架构
 
-### KDA
+### GDN
 
 主要思路包括：
 
@@ -40,7 +44,7 @@
 - 使用 chunk 计算处理训练序列，并提供 recurrent 路径支持逐 token 推理；
 - 为流式生成保留卷积状态和递推状态，支持缓存复用。
 
-### MLA
+### MLA(Nope)
 
 MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的表示和缓存开销：
 
