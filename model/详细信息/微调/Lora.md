@@ -1,0 +1,23 @@
+- 核心思想:**不直接去修改大模型的所有参数,而是低秩的增量矩阵ΔW**
+- 核心原因:针对于下游的某个具体任务,模型所需要更改的方向往==往集中在少数的几个方==向上面,而并非需要将模型的所有参数全部调整. 因此,ΔW往往具有低秩性
+	- 简单提一下矩阵的秩:本质上是在描述一个矩阵所拥有的独立方向
+	- 如果一个矩阵的维度为16,但是它的秩只有4,那么证明这个矩阵剩下的12个维度都是这4个维度的线性表示
+- 方法:
+	- 将ΔW分解为BA,其中B的形状为d_modelxd_rank(这个rank的值一般会比d_model小很多,目的就是为了对ΔW进行一个约束,使得更新的方向只集中在几个方向上),A的形状为d_rankxd_model,
+	- 通过矩阵乘法的性质$$rank(BA)\leq min(rank(B),rank(A))$$lora将B和A中间设置了一个很小的维度r,这使得$$rank(A)\leq r.rank(B)\leq r$$将ΔW的rank控制在r
+	- 这里举一个简单的例子:
+		- 假设$$\Delta W = \begin{bmatrix} 1 & 2 \\ 2 & 4 \end{bmatrix} $$
+		- 可以比较清晰的看到rank(ΔW) = 1,对于任意一个输入$$x = \begin{bmatrix} x_1 \\ x_2 \end{bmatrix} $$,它的输出$$\Delta W x = \begin{bmatrix} 1 & 2 \\ 2 & 4 \end{bmatrix} \begin{bmatrix} x_1 \\ x_2 \end{bmatrix} = \begin{bmatrix} x_1 + 2x_2 \\ 2x_1 + 4x_2 \end{bmatrix} = (x_1 + 2x_2) \begin{bmatrix} 1 \\ 2 \end{bmatrix}$$只会是$$c \begin{bmatrix} 1 \\ 2 \end{bmatrix}$$
+	- 这也就意味着无论如何去调整输入,都只会沿着(1,2)这一个方向上改变
+- 因此我们就可以知道,假设原模型为y = Wx,那么通过lora微调的方法:$$y=(W0​+ΔW)x$$中的$$Δy=ΔWx$$增量y只会沿着某几个方向去改变
+- 初始化:
+	- 原论文中采用的方法是==B使用全零初始化,A采用高斯初始化==
+	- 这使得BA的结果在训练开始的时候为0,保证开始时候模型的输出还是预训练时候的输出
+	- A和B不全为0的原因:
+		- 假设$$L = L(y),y = Wx + sBAx$$
+		- 那么当求梯度的时候,对于B:$$\frac{\partial L}{\partial B}=s\frac{\partial L}{\partial y}(Ax)^T$$因为A是非零的,所以在训练的第一步矩阵B就可以进行更新
+		- 对于A:$$\frac{\partial L}{\partial A}=sB^T\frac{\partial L}{\partial y}x^T$$但因为B是全0初始化,所以一开始A是不学习的,
+		- 这就意味着训练的第一步是B去学习,A不学习,等到B非零了A才会去学习,而如果都是全0初始化会导致两个矩阵无法去学习(因为梯度一直为0,无法更新)
+- Scaler:
+	- 标准公式中在BA的前面是有一个缩放因子:$$y = Wx + sBAx$$
+	- 这个缩放因子s通常为$$s = \frac {\alpha}{r}$$目的是为了去Lora更新对原模型的影响程度
