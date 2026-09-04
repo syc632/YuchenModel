@@ -17,7 +17,6 @@
 	- 另一种更加直观的方法去理解这个公式:我们可以把公式中的$S_{t-1}k_t$理解为用当前的键去旧的记忆中检索值$V_{old}$,当遇到$V_{new}$的时候,$V_t$对于同一个$K_t,$不再盲目的覆盖:$$v_t^{\text{new}}=(1-\beta_t)\,v_t^{\text{old}}+\beta_t\,v_t$$
 	- $$S_t=S_{t-1}-\underbrace{v_t^{\text{old}} k_t^\top}_{\text{删除}}+\underbrace{v_t^{\text{new}} k_t^\top}_{\text{写入}}$$
 	- $v_{new}$就是旧的v和新的v的学习组合,由动态因素$\beta$控制,beta在(0,1)之间,当beta=0的时候旧的v保持不变,当beta=1的时候旧的v完全擦除
-	- ![[截屏2026-08-13 21.13.02.png|355]]
 	- DeltNet架构图
 	- 从总体上看，DeltaNet 遵循 Llama 推广的现代 Transformer 模块设计，交替使用 token 混合（DeltaNet 取代了自注意力机制）和通道混合（SwiGLU）。主要的架构改进集中在 token 混合层，并在此层引入了三项关键改进。==首先，将查询和键处理的原始 L₁ 归一化和 1+ELU 激活函数替换为 L₂ 归一化和 SiLU 激活函数。其次，在查询、键和值的线性投影之后添加了短卷积运算。第三，在最终投影之前加入了输出归一化。==
 	- 对于Q和K的归一化
