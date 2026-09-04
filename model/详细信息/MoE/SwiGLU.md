@@ -20,6 +20,3 @@ c- 一种用于Transformer模块的FFN层的激活函数,把Swish/SiLU激活函�
 	- Swish/SiLU:
 		- Swish(x)=xσ(x)/SiLU(x)=x⋅sigmoid(x)
 - 相比与GLU,SwiGLU动态控制信息更强,表达能力更强,梯度更平缓
-- ![[截屏 2026-07-27 15.02.06.png|393]]
-- SwiGLU示意图
-- ![[SwiGLU.pdf]]
