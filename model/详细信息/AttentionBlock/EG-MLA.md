@@ -1,0 +1,17 @@
+- MLA的问题
+	- MLA的本质是把kv压缩到一个潜在空间去做缓存,==但是问题在于压缩意味会丢掉一些细粒度的信息==,上投影只能从已经压缩完的信息中去升维,所以并不能完全恢复被丢掉的信息
+	- EG-MLA引入Embedding Gate(token级别的门控机制)
+	- 公式:
+		- $$\begin{aligned}c_t^{KV} &= W^{DKV}x_t\\g_t &= LN(W_ge_t)\\\hat{c}_t^{KV}&=LN(W_ge_t)\odot(W^{UKV}c_t^{KV})\\k_t &= W^{UK}\hat{c}_t^{KV}\\v_t &= W^{UV}\hat{c}_t^{KV}\end{aligned}$$
+		- $$e_t为经过embedding的token向量$$
+		- $$c_t^{KV}为潜在空间的kv-cache$$
+		- $$LN为层归一化$$
+		- $$\\\hat{c}_t^{KV}就是gate和升维后kv相乘的结果gated kv$$
+	- 流程简述:token通过embedding层得到每个token的向量,然后再与上投影矩阵(可学习,用于调整维度和升维的kv的信息)相乘得到门控向量g,然后层归一化的g和升维后的kv==逐元素相乘==得到最终需要缓存的c
+	- 公式理解:
+		- $$w_1^T x_1 \odot w_2^T x_2=\left(\sum_{i=1}^{d_1} w_1^{(i)} x_1^{(i)}\right)\odot\left(\sum_{j=1}^{d_2} w_2^{(j)} x_2^{(j)}\right)=\sum_{i=1}^{d_1}\sum_{j=1}^{d_2}w_1^{(i)}w_2^{(j)}x_1^{(i)}x_2^{(j)}$$
+		- 这里引入门控向量和原本的潜在空间的kv-cache做逐元素相乘,得到c,本质上原本在潜在空间的c(kv-cache)的每个元素的形状都是W * x,现在加入EG机制之后每个元素变为了w1w2x1x2的形式,本质上是从一阶特征交互变为了二阶特征交互,使得每个元素不仅有上下文的信息,现在也有token原本的信息
+	- 鲁棒性:
+		- 即使latent压缩导致信息丢失,embedding gate也可也强调重要的信息,
+			- MLAlatent的压缩比例越高,性能下降越明显,但是加入Embedding Gate之后g向量会动态调整信息
+![[EG-MLA.pdf]]
