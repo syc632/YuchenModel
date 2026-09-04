@@ -55,7 +55,7 @@ MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的�
 ### Stable Latent MoE
 
 NVIDIA团队首次发布于1月,核心做法就是在通信路由之前先经过一个**下投影矩阵**把向量压缩为一个低维的向量,经过路由门控把向量路由到不同的专家上,计算完再经过一个上投影变为正常矩阵
-而Kimi团队在新作KimiK3的时候又进一步改动,把专家网络换为了SiTiGLU(详细见文档)
+而Kimi团队在新作KimiK3的时候又进一步改动,把专家网络换为了SiTiGLU,并且引入RMS解决数值不稳定的问题(详细见文档)
 
 
 ### AttnRes
