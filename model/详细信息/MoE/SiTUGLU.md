@@ -1,0 +1,17 @@
+- KimiK在Moe中使用的新架构
+	- 核心原因:
+	- 原始的SwiGLU中的两个乘法因子W_g和W_u$$\operatorname{SwiGLU}(x)=\underbrace{W_g x \cdot \sigma(W_g x)}_{\text{Swish gate}}\odot\underbrace{W_u x}_{\text{up branch}}$$可能会出现Wg的某一行W和某个输入的x夹角很小并且是两个较大的数值相乘,导致了相乘之后数值异常并且增大了低精度训练时数值溢出的风险
+	- 解决措施:
+	- K3引入一个Softcap:
+	- 将SiLU换为了SITU(Sigmoid Tanh  Unit):
+	- $$SiTU(z, \beta) = \beta tanh(\frac{z}{\beta})$$
+	- 因为$$-1<tanh(x)<1$$
+	- 所以$$-\beta < \beta tanh(\frac{x}{\beta}) < \beta$$
+	- 将输出数值压到了(-β,β)之间,避免了数值异常的问题
+- 为什么不会破坏SwiGLU?
+	- 当数值比较小的时候:
+		- $$tanh(x)≈x$$
+		- 因此$$\beta tanh(\frac{x}{\beta})≈x$$
+		- 相比与SwiGLU,并没有影响正常值的数值大小,但是却把异常值压缩到(-β,β)之间
+		- 公式:$$\operatorname{SiTU\text{-}GLU}(x)=\left[\beta_1 \tanh\left(\frac{W_g x}{\beta_1}\right)\odot \sigma(W_g x)\right]\odot\left[\beta_2 \tanh\left(\frac{W_u x}{\beta_2}\right)\right]$$
+		- 
