@@ -29,7 +29,7 @@
 
 2.midtrain:Lora + 全参微调
 
-3.posttrain: On Policy Distillation
+3.posttrain: OPD + PPO
 
 
 ## 核心架构
