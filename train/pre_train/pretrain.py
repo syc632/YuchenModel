@@ -15,12 +15,11 @@ from pathlib import Path
 
 @dataclass
 class TrainConfig:
-    project_dir: Path = Path(r"/")
+    project_dir: Path = Path(r"D:\Kimi")
 
     tokenizer_dir: str = "BPEmodel"
-    data_file: str = "..."
-    checkpoint_dir: str = "..."
-    save_path: str = "..."
+    data_file: str = "data/pretrain_hq.jsonl"
+    save_path: str = "weight/pretrain_weight"
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 20_000
@@ -224,7 +223,7 @@ def main():
     ckp_data = None
     #尝试恢复上次训练保存的完整状态
     if config.resume:
-        ckp_data = lm_check_point(model=None,weight="pretrain_weight",lm_config=config)
+        ckp_data = lm_check_point(model=None,weight=config.save_path,lm_config=config)
 
     #从本地目录加载已经训练好的tokenizer
     tokenizer = AutoTokenizer.from_pretrained(str(config.tokenizer_path))

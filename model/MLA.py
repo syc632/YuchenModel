@@ -83,31 +83,18 @@ class MLA(nn.Module):
         #k_rope
         k_rope_now = self.k_r(x).view(b, l, self.n_head, self.qk_rope)
         k_rope_now = self.rope.rotate_queries_or_keys(k_rope_now,offset=past_len,seq_dim=-3)
-        #k_rope_history
+
+
+
         if cache is not None:
             k_rope = torch.cat([cache[1], k_rope_now], dim=1)
-        else:
-            k_rope = k_rope_now
-
-
-
-        #cat the historic kv
-        if cache is not None:
             kv_latent = torch.cat([cache[0], kv_latent_now], dim=1)
-        else:
-            kv_latent = kv_latent_now
-
-        # 旧版 cache 只有两个元素；兼容读取时把历史 token 视为有效。
-        if cache is not None:
-            past_padding_mask = (
-                cache[2]
-                if len(cache) > 2
-                else torch.ones((b,past_len),device=x.device,dtype=torch.bool)
-            )
+            past_padding_mask = cache[2]
             key_padding_mask = torch.cat([past_padding_mask,padding_mask],dim=1)
         else:
+            kv_latent = kv_latent_now  #kv_latent
             key_padding_mask = padding_mask
-
+            k_rope = k_rope_now
         k_nope = self.k_up(kv_latent).view(b, total_len, self.n_head, self.qk_nope)
         k = torch.cat([k_nope, k_rope], dim=-1).transpose(1, 2)
 
@@ -127,19 +114,8 @@ class MLA(nn.Module):
         q_rope = self.rope.rotate_queries_or_keys(q_rope,offset=past_len,seq_dim=-3)
         q = torch.cat([q_nope, q_rope], dim=-1).transpose(1, 2)
 
-
-
-        # 生成q,k的全局位置,判断q可以查看哪些k
-        # 只生成当前的q的位置即可,ps:[3,4]
-        # 升维 变为(2,1)
-        q_pos = torch.arange(past_len, total_len, device=x.device).unsqueeze(1)
-        # k生成历史所有的位置,因为q要和所有的k做计算,ps[0,1,2,3,4]
-        # 升维变为(1,5)
-        k_pos = torch.arange(total_len, device=x.device).unsqueeze(0)
-        # 只让q和q位置以前的k进行计算
-        causal_mask = k_pos <= q_pos
-        attention_mask = causal_mask.view(1,1,l,total_len) & key_padding_mask.view(b,1,1,total_len)
-
+        attention_mask = self.create_causal_mask(total_len=total_len,past_len=past_len,key_padding_mask=key_padding_mask)
+        attention_mask = attention_mask.to(x.device,x.dtype)
 
 
         #MHA
@@ -158,6 +134,20 @@ class MLA(nn.Module):
         # MLA 只返回 mixing 结果；残差连接由外层 ModelLayer 统一处理。
         next_cache = (kv_latent,k_rope,key_padding_mask)
         return output,next_cache
+
+    def create_causal_mask(self,total_len,past_len,key_padding_mask):
+        l = total_len - past_len
+        # 生成q,k的全局位置,判断q可以查看哪些k
+        # 只生成当前的q的位置即可,ps:[3,4]
+        # 升维 变为(2,1)
+        q_pos = torch.arange(past_len, total_len).unsqueeze(1) #l,1
+        # k生成历史所有的位置,因为q要和所有的k做计算,ps[0,1,2,3,4]
+        # 升维变为(1,5)
+        k_pos = torch.arange(total_len).unsqueeze(0) #1,total_len
+        # 只让q和q位置以前的k进行计算
+        causal_mask = k_pos <= q_pos
+        attention_mask = causal_mask.view(1, 1, l, total_len) & key_padding_mask.view(-1, 1, 1, total_len)
+        return attention_mask
 
     @staticmethod
     def _init_weights(module: nn.Module) -> None:

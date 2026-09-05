@@ -1,7 +1,5 @@
 """Report the exact parameter count of the current default architecture.
 
-Run from the repository root:
-    py -3.14 test/report_parameter_count.py
 """
 
 from __future__ import annotations

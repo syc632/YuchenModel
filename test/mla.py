@@ -6,13 +6,14 @@ import torch
 # Allow both `python test/mla.py` and execution from the project root.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from model.MLA import Config, MLA
+from model.Nope import NoPEConfig,GatedMLA
+from model.MLA import Config,MLA
 
 def test_kv_cache_matches_full_attention():
     torch.manual_seed(0)
 
-    cfg = Config()
-    model = MLA(cfg).eval()  # 关闭 dropout
+    cfg = NoPEConfig()
+    model = GatedMLA(cfg).eval()  # 关闭 dropout
     x = torch.randn(2, 16, cfg.d_model)
 
     with torch.no_grad():

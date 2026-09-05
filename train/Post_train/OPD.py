@@ -40,14 +40,14 @@ OPD训练流程:
 
 @dataclass
 class OPDConfig:
-    project_dir: Path = Path(r"...")
-    data_file: str = ""
+    project_dir: Path = Path(r"D:\Kimi")
+    data_file: str = "data/sft_t2t_mini.jsonl"
     tokenizer_dir: str = "BPEmodel"
     student_checkpoint: str = ""
-    model_weight = ""
-    save_path: str = ""
+    model_weight = "train/mid_train/weight/sft_weight/sft_weight_512_moe.pth"
+    save_path: str = "train/Post_train/weight/opd_weight"
 
-    teacher_model_path: Path = Path("...")
+    teacher_model_path: Path = Path("D:/models/Qwen3-1.7B")
 
     max_samples: int | None = 1_000
     max_prompt_tokens: int = 384
@@ -69,7 +69,7 @@ class OPDConfig:
 
 
     resume:bool = True
-    use_compile = True
+    use_compile = False
     log_interval: int = 10
     save_interval: int = 200
     seed: int = 42
@@ -87,6 +87,10 @@ class OPDConfig:
     @property
     def tokenizer_path(self) -> Path:
         return self.project_dir / self.tokenizer_dir
+
+    @property
+    def model_weight_path(self) -> Path:
+        return self.project_dir / self.model_weight
 
     @property
     def student_checkpoint_path(self) -> Path:
@@ -217,27 +221,29 @@ def sample_student_response(tokenizer,prompt,model,max_prompt_tokens,max_samples
     #因为此函数是在训练循环中被调用,模型处于train状态,但是采样不希望被
     #Dropout或者RMSNorm干扰,不需要计算梯度,因此临时切到eval()
     model.eval()
+    auto_cast = torch.amp.autocast(device_type="cuda", dtype=torch.float16)
+    with auto_cast:
     #预填充,把提示词先给model做一次前向传播
-    generate = []
-    output = model(input_ids=input_ids,logits_to_keep=1)
-    cache = output.past_key_values
-    for _ in range(max_samples):
-        next_id = next_token_id(output.logits[:,-1,:],temperature=temperature,top_p=top_p)
-        generate.append(next_id)
-        if next_id.item() == tokenizer.eos_token_id:
-            break
-        output = model(input_ids=next_id,cache=cache,logits_to_keep = 1)
+        generate = []
+        output = model(input_ids=input_ids,logits_to_keep=1)
         cache = output.past_key_values
-    model.train(state)
-    response_ids = torch.cat(generate, dim=1)[0].tolist()
-    response_text = tokenizer.decode(response_ids,skip_special_tokens=True)
-    effective_prompt_ids = input_ids[0].tolist()
-    rollout = StudentRollout(
-        prompt_ids=effective_prompt_ids,
-        prompt_text=prompt,
-        response_ids=response_ids,
-        response_text=response_text,
-    )
+        for _ in range(max_samples):
+            next_id = next_token_id(output.logits[:,-1,:],temperature=temperature,top_p=top_p)
+            generate.append(next_id)
+            if next_id.item() == tokenizer.eos_token_id:
+                break
+            output = model(input_ids=next_id,cache=cache,logits_to_keep = 1)
+            cache = output.past_key_values
+        model.train(state)
+        response_ids = torch.cat(generate, dim=1)[0].tolist()
+        response_text = tokenizer.decode(response_ids,skip_special_tokens=True)
+        effective_prompt_ids = input_ids[0].tolist()
+        rollout = StudentRollout(
+            prompt_ids=effective_prompt_ids,
+            prompt_text=prompt,
+            response_ids=response_ids,
+            response_text=response_text,
+        )
     return rollout
 
 
@@ -259,11 +265,11 @@ class LocalTeacherModel:
     def __init__(self,model:nn.Module,tokenizer,top_k,device:torch.device):
         """
         冻结教师模型,为学生模型生成的每个token去打分
-
+        教师模型常驻CPU,打分的时候临时搬到GPU,打完分再搬回CPU
         """
 
-
-        self.model = model.eval()
+        #教师模型只做推理打分,不需要梯度也不需要常驻GPU
+        self.model = model.eval().cpu()
         self.tokenizer = tokenizer
         self.device = device
         self.top_k = top_k
@@ -281,6 +287,8 @@ class LocalTeacherModel:
         :param temperature:
         :return:
         """
+
+        self.model.to(self.device)
 
         #1.先用教师自己的tokenizer构造输入
         #把提示词转换为模型要求的prompt格式
@@ -347,6 +355,7 @@ class LocalTeacherModel:
             teacher_log_probs = f.log_softmax(candidates_logits,dim=0)
             prefix_text = self.tokenizer.decode( prefix_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             step.append(TeacherStep(response_prefix=prefix_text,candidate_texts=candidates_text,teacher_log_probs=teacher_log_probs))
+        self.model.cpu()
         return step
 
 
@@ -565,7 +574,7 @@ if __name__ == "__main__":
     #student and teacher model
     student_model = YuchenModelCausalLLM(model_config)
     student_tokenizer = AutoTokenizer.from_pretrained(opd_config.tokenizer_path)
-    student_model.load_state_dict(torch.load(opd_config.student_checkpoint_path, map_location="cpu", weights_only=True))
+    student_model.load_state_dict(torch.load(opd_config.model_weight_path, map_location="cpu", weights_only=True))
     student_dtype = torch.bfloat16 if device == "cuda" else torch.float32
     student_model = student_model.to(device, dtype=student_dtype)
     teacher_tokenizer = AutoTokenizer.from_pretrained(opd_config.teacher_model_path, trust_remote_code=True)

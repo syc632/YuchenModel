@@ -5,7 +5,11 @@ import random
 import os
 import time
 import math
-from torch.utils.data import DataLoader,Dataset,Sampler
+from torch.utils.data import Sampler
+from transformers import AutoTokenizer, AutoModel
+
+from model.model import YuchenModelCausalLLM
+
 try:
     import wandb  #日志
 except ImportError:
@@ -18,7 +22,6 @@ except ImportError:
 
 
 
-
 #先判断是否多卡分布式训练,没有启动 == > 直接print/ 已经启动 ==> 判断当前进程rank是否为0
 #rank = 0 ==>print   rank 不等于0 ==>什么都不做
 def is_main_process():
@@ -27,7 +30,7 @@ def is_main_process():
 def Logger(content):
     #主程序使用
     if is_main_process():
-        print(content)
+        print(content, flush=True)
 
 
 #随机种子
@@ -36,6 +39,16 @@ def set_seed(seed:int=42):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def init_distributed_mode():
+    if int(os.environ.get("RANK", -1)) == -1:
+        return 0  # 非DDP模式
+
+    dist.init_process_group(backend="nccl")
+    local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(local_rank)
+    return local_rank
 
 
 def retry(src,trg,attmpt=10,delay=1):
@@ -60,6 +73,8 @@ def retry(src,trg,attmpt=10,delay=1):
 def lm_check_point(lm_config,weight:str=None,model=None,optimizer=None,epoch=None,step=0,**kwargs):
     """
     kwargs: 用于保存额外的训练状态
+    model传参使用model A 保存check_point
+    没传使用Model B 加载check_point
     """
     save_dir = lm_config.save_path
     #检查/创建文件
@@ -70,6 +85,8 @@ def lm_check_point(lm_config,weight:str=None,model=None,optimizer=None,epoch=Non
     check_path = f"{save_dir}/{weight}_{lm_config.hidden_size}{moe_path}.pth"
     #完整的训练断点文件的路径,用于中断后恢复训练
     resume_path = f"{save_dir}/{weight}_{lm_config.hidden_size}{moe_path}_resume.pth"
+
+
 
     #模式A:保存check_point
     if model is not None:
@@ -213,5 +230,38 @@ def get_lr(current_step,total_step,lr,warmup_ratio,min_lr_ratio):
     return lr*(min_lr_ratio+(1-min_lr_ratio)*0.5*(1+math.cos(math.pi*progress)))
 
 
+def init_model(lm_config,from_weight,tokenizer_path,save_dir,device="cuda"):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    model = YuchenModelCausalLLM(lm_config)
 
 
+    if from_weight is not None:
+        moe_suffix = "_moe" if lm_config.use_moe is not None else ""
+        weight_path = f"{save_dir}/{from_weight}_{lm_config.hidden_size}{moe_suffix}.pth"
+        weights = torch.load(weight_path,map_location=device)
+        model.load_state_dict(weights,strict=False)
+
+    get_model_params(model,lm_config)
+    Logger(f"可训练参数:{sum(p.numel() for p in model.parameters() if p.requires_grad == True)}")
+    return model.to(device),tokenizer
+
+
+
+class Reward_model:
+    def __init__(self,model_path,device):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
+        self.model = AutoModel.from_pretrained(model_path,trust_remote_code=True)
+        self.model = self.model.to(device).eval()
+        self.device = device
+
+    @torch.no_grad()
+    def get_score(self,messages,response):
+        #把message(一个字典列表)中除最后一条外的{"role":content}的字符串,使用"\n"把这些字符串连起来
+        history_text = "\n".join([f"{m['role']}: {m['content']}" for m in messages[:-1]])
+        last_query = messages[-1]["content"] if messages else ""
+        message_content = f"{history_text}\n以上是历史对话,我的新问题是\n{last_query}"
+        eval_message = [{"role":"user","content":message_content},
+                        {"role":"assistant","content":response}]
+        #.get_score()调用Huggingface模型的接口
+        score = self.model.get_score(self.tokenizer,eval_message)
+        return max(min(score,3.0),-3.0)

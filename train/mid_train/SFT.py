@@ -11,12 +11,11 @@ from model.model import YuchenModelCausalLLM
 from train.train_util import *
 @dataclass
 class SFTConfig:
-    project_dir: Path = Path(r"/")
+    project_dir: Path = Path(r"D:\Kimi")
 
     tokenizer_dir: str = "BPEmodel" #分词器
-    data_file: str = "..." #训练数据
-    checkpoint_dir: str = "..."  #检查点目录
-    save_path: str = "..."  #保存路径
+    data_file: str = "data/sft_t2t_mini.jsonl" #训练数据
+    save_path: str = "weight/sft_weight"  #保存路径
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 90000
@@ -322,7 +321,7 @@ if __name__ == "__main__":
     model = build_model(tokenizer, sft_config).to(device=device,dtype=sft_config.dtype)
     get_model_params(model,model_config)
     # 加载预训练权重：这里只加载模型参数，不加载预训练的优化器状态
-    pretrained_path = Path(r"/train/weight/pretrain_weight\pretrain_weight_512_moe.pth")
+    pretrained_path = sft_config.project_dir /"train"/ "weight" / "pretrain_weight" / "pretrain_weight_512_moe.pth"
 
     state_dict = torch.load(pretrained_path,map_location="cpu",weights_only=True,)
 
