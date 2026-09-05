@@ -1,0 +1,7 @@
+# Install a PyTorch build appropriate for the target CUDA platform first.
+# Exact versions and device are recorded in every frozen experiment manifest.
+torch>=2.4
+transformers>=4.45,<6
+rotary-embedding-torch==0.9.1
+numpy>=1.25
+matplotlib>=3.9
