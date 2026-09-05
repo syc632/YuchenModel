@@ -3,23 +3,23 @@ import torch.nn as nn
 from dataclasses import dataclass
 from rotary_embedding_torch import RotaryEmbedding
 import torch.nn.functional as f
-from scipy.special.cython_special import kv
+
 
 
 @dataclass
 class EGConfig:
-    d_model = 512
-    n_head = 8
-    qk_nope = 48
-    qk_rope = 16
-    v_head_dim = 64
-    qk_head_dim = 64
-    kv_latent = 16
-    q_latent = 16
-    dropout = 0.5
+    d_model: int = 512
+    n_head: int = 8
+    qk_nope: int = 48
+    qk_rope: int = 16
+    v_head_dim: int = 64
+    kv_latent: int = 16
+    q_latent: int = 16
+    dropout: float = 0.0
     norm_eps: float = 1e-5
-    vocab_size  = 6400
-    kv_embd:int = 64
+    vocab_size: int = 6400
+    kv_embd: int = 64
+
 class EG_MLA(nn.Module):
     def __init__(self,cfg:EGConfig):
         super().__init__()
@@ -48,25 +48,29 @@ class EG_MLA(nn.Module):
         self.rope = RotaryEmbedding(cfg.qk_rope)
 
 
-        #Embedding Gate
-        self.kv_embd = nn.Embedding(cfg.vocab_size,cfg.kv_embd)
-        self.kv_embd_norm = nn.RMSNorm(cfg.n_head*(cfg.qk_nope*cfg.v_head_dim),eps=cfg.norm_eps)
-        self.eg_gate_up = nn.Linear(cfg.kv_embd,cfg.n_head*(cfg.qk_nope*cfg.v_head_dim),bias=False)
-
-
         self.W_o = nn.Linear(cfg.n_head * cfg.v_head_dim, cfg.d_model,bias=False)
+
+        # 每个历史 token 单独产生 K/V 的逐通道门控 缓存 token IDs，
+        # 增量解码时不能使用当前 token 的 gate 去调制所有历史 K/V。
+        self.kv_embd = nn.Embedding(cfg.vocab_size, cfg.kv_embd)
+        self.kv_embd_norm = nn.RMSNorm(cfg.kv_embd, eps=cfg.norm_eps)
+        self.eg_gate_up = nn.Linear(
+            cfg.kv_embd, cfg.n_head * (self.qk_head_dim + self.v_head_dim), bias=False
+        )
 
         #init
         self.apply(self._init_weights)
     def forward(self,x,token_ids,cache=None,padding_mask=None):
         """
         :param x: 当前输入，形状为 [B, L, D]
-        :param cache: (kv_latent, k_rope, key_padding_mask)
-        :param token_ids: 当前输入的 token id，形状为 [B, L]
+        :param cache: (kv_latent, k_rope, key_padding_mask, token_ids)
         :param padding_mask: 当前输入的有效 token 掩码，形状为 [B, L]
         :return: (attention_output, next_cache)
         """
         b, l, d = x.shape
+        if token_ids is None or token_ids.shape != (b, l):
+            raise ValueError("Embedding Gate MLA需要形状[B,L]的当前token_ids")
+        all_ids = token_ids if cache is None else torch.cat([cache[3], token_ids], dim=1)
 
 
         #padding_mask
@@ -100,11 +104,10 @@ class EG_MLA(nn.Module):
 
 
 
-        #cat the historic kv and padding
+        #cat the historic kv
         if cache is not None:
             kv_latent = torch.cat([cache[0], kv_latent_now], dim=1)
-            # 历史token是否为padding是无法从头推导的(forward输入不包含历史token的任何信息),因此需要把padding加入到cache中
-            past_padding_mask =  cache[2]
+            past_padding_mask = cache[2]
             key_padding_mask = torch.cat([past_padding_mask, padding_mask], dim=1)
         else:
             kv_latent = kv_latent_now
@@ -112,23 +115,24 @@ class EG_MLA(nn.Module):
 
 
 
-        # Embedding Gate
-        eg_gate = self.kv_embd(token_ids)
-        eg_gate = self.kv_embd_norm(eg_gate)
-        eg_gate = self.eg_gate_up(eg_gate)
-
         k_nope = self.k_up(kv_latent).view(b, total_len, self.n_head, self.qk_nope)
         k = torch.cat([k_nope, k_rope], dim=-1).transpose(1, 2)
-        k = k*eg_gate
+
 
 
         #v
         v = self.v_up(kv_latent)
         v = v.view(b,total_len,self.n_head,self.v_head_dim).transpose(1,2)
-        v = v*eg_gate
 
 
 
+        gates = self.eg_gate_up(self.kv_embd_norm(self.kv_embd(all_ids)))
+        gates = gates.view(b, total_len, self.n_head, self.qk_head_dim+self.v_head_dim)
+        # 2*sigmoid(0)=1，初始门控接近恒等,门控取值范围在(0,2)之间
+        #权重初始化是均值为0,方差为0.02,因此在训练开始的时候gate*k/v的值 = k/v
+        gates = 2 * torch.sigmoid(gates.transpose(1, 2))
+        k_gate, v_gate = gates.split([self.qk_head_dim, self.v_head_dim], dim=-1)
+        k, v = k*k_gate, v*v_gate
 
         #Q
         q_latent = self.q_down(x)
@@ -149,9 +153,7 @@ class EG_MLA(nn.Module):
         k_pos = torch.arange(total_len, device=x.device).unsqueeze(0)
         # 只让q和q位置以前的k进行计算
         causal_mask = k_pos <= q_pos
-        #&两个位置都为True,结果才是True
         attention_mask = causal_mask.view(1,1,l,total_len) & key_padding_mask.view(b,1,1,total_len)
-
 
 
 
@@ -166,11 +168,10 @@ class EG_MLA(nn.Module):
             dropout_p=dropout_p,
         )
         output = output.transpose(1,2).contiguous().view(b,l,-1)
-        #softmax会把padding位置变为非零输出
         output = self.W_o(output)*padding_mask.unsqueeze(-1)
 
         # MLA 只返回 mixing 结果；残差连接由外层 ModelLayer 统一处理。
-        next_cache = (kv_latent,k_rope,key_padding_mask)
+        next_cache = (kv_latent,k_rope,key_padding_mask,all_ids)
         return output,next_cache
 
     @staticmethod

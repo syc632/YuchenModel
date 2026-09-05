@@ -29,7 +29,7 @@
 
 2.midtrain:Lora + 全参微调
 
-3.posttrain: OPD + PPO
+3.posttrain: On Policy Distillation
 
 
 ## 核心架构
@@ -54,25 +54,20 @@ MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的�
 
 ### Stable Latent MoE
 
-NVIDIA团队首次发布于1月,核心做法就是在通信路由之前先经过一个**下投影矩阵**把向量压缩为一个低维的向量,经过路由门控把向量路由到不同的专家上,计算完再经过一个上投影变为正常矩阵
-而Kimi团队在新作KimiK3的时候又进一步改动,把专家网络换为了SiTiGLU,并且引入RMS解决数值不稳定的问题(详细见文档)
+MoE 模块位于前馈网络位置，在 latent space 中完成专家路由：
 
+- 先将 hidden state 投影到较小的 latent dimension；
+- 使用 RMSNorm 稳定 latent 表示；
+- 同时保留共享专家和 Top-k 路由专家；
+- 使用门控网络为每个 token 选择路由专家；
+- 使用负载均衡辅助损失，降低专家负载不均的问题；
+- 推理阶段提供按专家聚合 token 的执行路径。
 
 ### AttnRes
 
+AttnRes 用于跨层残差融合。模型会保存一个周期内的历史 hidden states，并通过可学习查询向量计算各层表示的权重，再进行加权求和。
 
-Kimi团队3月份新作,把Attention作用于层和层之间,在Full Attention Residual的模式下,当前层的输出都会和前面所有层的输出计算一次注意力,等于是把每个层的隐藏向量当作token处理,这一点非常的想早期RNN和Attention结合的模型,当然如果查看原论文会发现他们的起点就是从RNN出发的
 默认配置中，KDA 与 MLA 按周期(3:1)交替使用；每个周期结束后可以执行一次 AttnRes 融合。这样可以在保留线性递推混合效率的同时，引入更强的全局信息交互能力。
-
-
-## 新增:
-- DeepseekSpare Attention
-
-- Mamba2
-
-- Nope
-
-- Embedding—Gate—MLA
 
 
 
@@ -87,7 +82,7 @@ Kimi团队3月份新作,把Attention作用于层和层之间,在Full Attention R
 
 
 
-## 待办事项
+##待办事项
 
 1.更新笔记
 

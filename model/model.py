@@ -9,7 +9,10 @@ from typing import Optional
 from .Stable_Latent_Moe import MoE
 from .MLA import MLA
 from .GatedDeltaNet import GatedDeltaNet
+from .Mamba2 import Mamba2
 from .ffn import SwiGlu,SiTUGLU
+from .Nope import NoPEMLA
+from .Embedding_Gate_MLA import EG_MLA
 
 
 @dataclass
@@ -23,10 +26,21 @@ class Config:
     chunk_size: int = 64
     gate_rank: int | None = None
     n_layer: int = 12
-    ratio: int = 3  #deltanet层和mla层的比例
+    ratio: int = 3  #线性Mixer层和MLA层的比例
     dropout: float = 0.0
     norm_eps: float = 1e-5
     d_head: int | None = None
+
+    #mamba2
+    mixer_type: str = "gdn"
+    mamba_d_state: int = 64
+    mamba_expand: int = 2
+    mamba_n_groups: int = 1
+
+    attention_type: str = "mla"
+    ffn_type: str = "swiglu"
+    expert_ffn_type: str = "situglu"
+    kv_embd: int = 64
 
     #mla
     #qk不需要做rope的维度
@@ -58,10 +72,31 @@ class Config:
     eos_token_id: int | None = None
     #Hook,用于保证传参正确
     def __post_init__(self):
+        if self.n_layer < 1 or self.ratio < 0:
+            raise ValueError("n_layer必须为正，ratio必须非负")
+        if self.attention_type not in {"mla", "nope", "embedding_gate"}:
+            raise ValueError("未知attention_type")
+        if self.ffn_type not in {"swiglu", "situglu"} or self.expert_ffn_type not in {"swiglu", "situglu"}:
+            raise ValueError("FFN类型必须为swiglu或situglu")
         if self.d_model % self.n_head != 0:
             raise ValueError("d_model必须能被n_head整除")
         if not 1 <= self.n_expert_per_token <= self.n_route_expert:
             raise ValueError("n_expert_per_token必须在[1,n_route_expert]范围内")
+        if self.mixer_type not in {"gdn", "mamba2"}:
+            raise ValueError('mixer_type必须为"gdn"或"mamba2"')
+        if self.mixer_type == "mamba2":
+            if self.mamba_expand <= 0:
+                raise ValueError("mamba_expand必须大于0")
+            if self.mamba_d_state <= 0:
+                raise ValueError("mamba_d_state必须大于0")
+            if self.mamba_n_groups <= 0:
+                raise ValueError("mamba_n_groups必须大于0")
+            mamba_inner = self.mamba_expand * self.d_model
+            if self.head_dim <= 0 or mamba_inner % self.head_dim != 0:
+                raise ValueError("mamba_expand*d_model必须能被head_dim整除")
+            mamba_heads = mamba_inner // self.head_dim
+            if mamba_heads % self.mamba_n_groups != 0:
+                raise ValueError("Mamba2的head数量必须能被mamba_n_groups整除")
         if self.d_head is None:
             self.d_head = self.d_model // self.n_head
         #embedding维度需要和主干隐藏维度保持一致
@@ -101,15 +136,17 @@ class ModelLayer(nn.Module):
         self.ffn_norm = nn.RMSNorm(cfg.d_model, eps=cfg.norm_eps)
         self.use_moe = cfg.use_moe
         if mla:
-            self.mixer = MLA(cfg)
+            self.mixer = {"mla": MLA, "nope": NoPEMLA, "embedding_gate": EG_MLA}[cfg.attention_type](cfg)
+        elif cfg.mixer_type == "mamba2":
+            self.mixer = Mamba2(cfg)
         else:
             self.mixer = GatedDeltaNet(cfg)
         if cfg.use_moe:
             self.ffn = MoE(cfg)
         else:
-            self.ffn = SwiGlu(cfg.d_model,cfg.d_inner)
+            self.ffn = {"swiglu": SwiGlu, "situglu": SiTUGLU}[cfg.ffn_type](cfg.d_model,cfg.d_inner)
 
-    def forward(self,x,cache=None,padding_mask=None):
+    def forward(self,x,cache=None,padding_mask=None,token_ids=None):
         b,l,d = x.shape
         if padding_mask is None:
             padding_mask = torch.ones((b,l),dtype=torch.bool,device=x.device)
@@ -117,11 +154,8 @@ class ModelLayer(nn.Module):
             padding_mask = padding_mask.to(device = x.device,dtype = bool)
         token_mask = padding_mask.unsqueeze(-1)
         x = self.in_norm(x)
-        x,cache = self.mixer(
-            x,
-            cache=cache,
-            padding_mask=padding_mask,
-        )
+        mixer_kwargs = {"token_ids": token_ids} if isinstance(self.mixer, EG_MLA) else {}
+        x,cache = self.mixer(x, cache=cache, padding_mask=padding_mask, **mixer_kwargs)
         x = x*token_mask
         x = self.ffn_norm(x)
         if self.use_moe:
@@ -129,7 +163,7 @@ class ModelLayer(nn.Module):
         else:
             x = self.ffn(x)
             aux_loss = x.new_zeros(())
-        return x,cache,aux_loss
+        return x*token_mask,cache,aux_loss
 
 
 class YuchenModel(nn.Module):
@@ -139,7 +173,9 @@ class YuchenModel(nn.Module):
         #attn_res
         self.attn_res = cfg.use_attn_res
         self.q = nn.Linear(cfg.d_model,1,bias=False)
-        self.res_norm = nn.RMSNorm(cfg.d_model)
+        self.res_norm = nn.RMSNorm(cfg.d_model, eps=cfg.norm_eps)
+        self.q.requires_grad_(self.attn_res)
+        self.res_norm.requires_grad_(self.attn_res)
 
         #混合周期
         self.cycle = cfg.ratio+1
@@ -148,7 +184,7 @@ class YuchenModel(nn.Module):
         )
         self.norm = nn.RMSNorm(cfg.d_model, eps=cfg.norm_eps)
 
-    def forward(self,x,cache=None,padding_mask=None):
+    def forward(self,x,cache=None,padding_mask=None,token_ids=None):
         if padding_mask is None:
             padding_mask = torch.ones(x.shape[:2],dtype=torch.bool,device=x.device)
         else:
@@ -165,36 +201,22 @@ class YuchenModel(nn.Module):
         if len(cache) != len(self.layers):
             raise ValueError("cache数量必须和模型层数一致")
         next_cache = []
-        if not self.attn_res:
-            #把第i层和第i个cache配对
-            for layer,layer_cache in zip(self.layers,cache):
-                x,layer_cache,aux_loss = layer(x,layer_cache,padding_mask)
-                next_cache.append(layer_cache)
-                if layer.use_moe:
-                    moe_layers += 1
-                    total_aux_loss = total_aux_loss + aux_loss
-            if moe_layers>0:
-                total_aux_loss = total_aux_loss / moe_layers
-            x = self.norm(x)*padding_mask.unsqueeze(-1)
-            return x,next_cache,total_aux_loss
-
-        #使用attn_res,每个周期使用一次attn_res
-        else:
-            block = [x]
-            for layer,layer_cache in zip(self.layers,cache):
-                x,layer_cache,aux_loss = layer(x,layer_cache,padding_mask)
-                if layer.use_moe:
-                    total_aux_loss = total_aux_loss + aux_loss
-                    moe_layers += 1
+        # 每个周期的输入和每层输出各出现一次；融合后开始新周期。
+        block = [x] if self.attn_res else None
+        for index, (layer, layer_cache) in enumerate(zip(self.layers, cache)):
+            x, layer_cache, aux_loss = layer(x, layer_cache, padding_mask, token_ids)
+            next_cache.append(layer_cache)
+            if layer.use_moe:
+                total_aux_loss = total_aux_loss + aux_loss
+                moe_layers += 1
+            if block is not None:
                 block.append(x)
-                if len(block) % self.cycle == 0:
-                    x = attn_res(block,x,self.q,self.res_norm,self.q)
-                    block.append(x)
-                next_cache.append(layer_cache)
-            if moe_layers>0:
-                total_aux_loss = total_aux_loss/moe_layers
-            x = self.norm(x)*padding_mask.unsqueeze(-1)
-            return x,next_cache,total_aux_loss
+                if (index + 1) % self.cycle == 0 or index + 1 == len(self.layers):
+                    x = attn_res(block, None, self.res_norm, self.q)
+                    block = [x]
+        if moe_layers:
+            total_aux_loss = total_aux_loss / moe_layers
+        return self.norm(x)*padding_mask.unsqueeze(-1), next_cache, total_aux_loss
 
 
 class YuchenModelCausalLLM(nn.Module):
@@ -250,7 +272,7 @@ class YuchenModelCausalLLM(nn.Module):
                 padding_mask = input_ids.ne(self.config.pad_token_id)
 
         hidden_state,kv_cache,aux_loss = self.model(
-            self.embd(input_ids),cache,padding_mask
+            self.embd(input_ids),cache,padding_mask,token_ids=input_ids
         )
         slice_indices = slice(-logits_to_keep,None) if logits_to_keep>0 else slice(None)
         sliced_state = hidden_state[:,slice_indices,:]
@@ -269,8 +291,8 @@ class YuchenModelCausalLLM(nn.Module):
             lm_loss = f.cross_entropy(
                 shifted_logits.view(-1,shifted_logits.size(-1)),
                 shifted_label.view(-1),
-                ignore_index=-100
-            )
+                ignore_index=-100, reduction="sum"
+            ) / shifted_label.ne(-100).sum().clamp_min(1)
             total_loss = lm_loss + self.aux_loss_alpha * aux_loss
 
         #Huggingface定义的一个标准输出容器类,把本次前向的多个结果打包起来

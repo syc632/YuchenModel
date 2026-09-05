@@ -25,7 +25,7 @@ class TestAttnRes(unittest.TestCase):
         norm = nn.RMSNorm(8)
         query = nn.Linear(8, 1, bias=False)
 
-        actual = attn_res(sources, partial, query, norm, query)
+        actual = attn_res(sources, partial, norm, query)
         stacked = torch.stack([*sources, partial], dim=0)
         weights = torch.softmax(
             torch.einsum("d,nbld->nbl", query.weight.view(-1), norm(stacked)),
@@ -46,7 +46,7 @@ class TestAttnRes(unittest.TestCase):
         sources = [torch.randn(1, 2, 4), torch.randn(1, 2, 4)]
         query = nn.Linear(4, 1, bias=False)
         nn.init.zeros_(query.weight)
-        actual = attn_res(sources, None, query, nn.RMSNorm(4), query)
+        actual = attn_res(sources, None, nn.RMSNorm(4), query)
         torch.testing.assert_close(actual, torch.stack(sources).mean(dim=0))
 
 

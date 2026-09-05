@@ -22,6 +22,7 @@ class MoeConfig:
     aux_loss_alpha:float = 0.01
 
     use_moe:bool = True
+    expert_ffn_type: str = "situglu"
 
 class MoEGate(nn.Module):
     def __init__(self,cfg:MoeConfig):
@@ -179,8 +180,9 @@ class MoE(nn.Module):
         super().__init__()
 
         #专家
-        self.shared_expert = nn.ModuleList(SiTUGLU(cfg.d_model,cfg.d_inner) for _ in range(cfg.n_shared_expert))
-        self.route_expert = nn.ModuleList(SiTUGLU(cfg.d_latent,cfg.d_inner) for _ in range(cfg.n_route_expert))
+        expert_cls = {"situglu": SiTUGLU, "swiglu": SwiGlu}[getattr(cfg, "expert_ffn_type", "situglu")]
+        self.shared_expert = nn.ModuleList(expert_cls(cfg.d_model,cfg.d_inner) for _ in range(cfg.n_shared_expert))
+        self.route_expert = nn.ModuleList(expert_cls(cfg.d_latent,cfg.d_inner) for _ in range(cfg.n_route_expert))
 
 
         #路由
