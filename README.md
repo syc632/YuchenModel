@@ -54,14 +54,9 @@ MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的�
 
 ### Stable Latent MoE
 
-MoE 模块位于前馈网络位置，在 latent space 中完成专家路由：
+NVIDIA团队首次发布于1月,核心做法就是在通信路由之前先经过一个**下投影矩阵**把向量压缩为一个低维的向量,经过路由门控把向量路由到不同的专家上,计算完再经过一个上投影变为正常矩阵
+而Kimi团队在新作KimiK3的时候又进一步改动,把专家网络换为了SiTiGLU,并且引入RMS解决数值不稳定的问题(详细见文档)
 
-- 先将 hidden state 投影到较小的 latent dimension；
-- 使用 RMSNorm 稳定 latent 表示；
-- 同时保留共享专家和 Top-k 路由专家；
-- 使用门控网络为每个 token 选择路由专家；
-- 使用负载均衡辅助损失，降低专家负载不均的问题；
-- 推理阶段提供按专家聚合 token 的执行路径。
 
 ### AttnRes
 
