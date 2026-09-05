@@ -7,7 +7,7 @@ try:
     import wandb  #日志
 except ImportError:
     wandb = None
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import torch
 from torch.utils.data import DataLoader,Dataset
 from transformers import AutoTokenizer
@@ -53,7 +53,8 @@ class TrainConfig:
     project_name:str = "YuchenModel"
     use_moe: bool = True
     hidden_size: int = 512
-    use_compile: bool = True
+    use_compile: bool = False
+    model_config: dict = field(default_factory=dict)
 
     #字段存原料,属性存成品
     @property
@@ -120,17 +121,13 @@ class PretrainData(Dataset):
 
 def build_model(tokenizer,train_config):
     #在统一的模型Config上覆盖本次预训练需要的配置
-    model_config = Config()
-    model_config.d_model = train_config.hidden_size
-    model_config.embd = train_config.hidden_size
-    model_config.d_head = model_config.d_model//model_config.n_head
-    model_config.vocab_size = len(tokenizer)
-    model_config.pad_token_id = tokenizer.pad_token_id
-    model_config.bos_token_id = tokenizer.bos_token_id
-    model_config.eos_token_id = tokenizer.eos_token_id
-    model_config.use_moe = train_config.use_moe
-    model_config.use_attn_res = True
-    return YuchenModelCausalLLM(model_config)
+    values = dict(d_model=train_config.hidden_size, use_moe=train_config.use_moe)
+    #.update把tran_config.model_cofig这个字典里的所有键值对都合并覆盖到values中
+    values.update(train_config.model_config)
+    values.update(vocab_size=len(tokenizer), pad_token_id=tokenizer.pad_token_id,
+                  bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id)
+    return YuchenModelCausalLLM(Config(**values))
+
 
 
 def train_epoch(
