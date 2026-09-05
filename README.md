@@ -77,13 +77,3 @@ Kimi团队3月份新作,把Attention作用于层和层之间,在Full Attention R
 
 
 
-## 待办事项
-
-1.更新笔记
-
-2.更换Aux_loss为QB
-
-3.对比横向对比各个组件
-
-4.消融实验
-
