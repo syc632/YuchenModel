@@ -17,9 +17,9 @@ from pathlib import Path
 class TrainConfig:
     project_dir: Path = Path(r"D:\Kimi")
 
-    tokenizer_dir: str = "BPEmodel"
-    data_file: str = "data/pretrain_hq.jsonl"
-    save_path: str = "weight/pretrain_weight"
+    tokenizer_dir: str = ""
+    data_file: str = ""
+    save_path: str = ""
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 20_000
