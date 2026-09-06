@@ -2,7 +2,6 @@ import re
 from pathlib import Path
 from dataclasses import dataclass
 from transformers import AutoTokenizer, AutoModel
-from datasets import Dataset
 from torch.utils.data import DataLoader
 import torch
 import torch.distributed as dist
@@ -11,7 +10,7 @@ from transformers import AutoTokenizer
 from contextlib import nullcontext
 from torch import optim, nn
 from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler,Dataset
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from model.model import YuchenModelCausalLLM,Config
@@ -20,32 +19,49 @@ from train.train_util import *
 
 @dataclass
 class PPOConfig:
-    data_file = "data/rlaif.jsonl"
-    wandb_proj = "YuchenModel"
-    save_dir = ""
-    save_weight = ''
-    hidden_size = 512
-    max_length:int = 1024
-    is_reasoning = False
-    reward_model_path = "reward_model.pth"
-    epochs:int = 1
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    max_new_tokens = 1000
-    use_moe = True
-    clip_epsilon = 0.5
-    vf_coef = 0.5
-    kl_coef = 0.5
-    accumulation_steps = 10
-    grad_clip = 1.0
-    update_old_actor = 100
-    save_interval = 1000
-    use_resume = True
-    dtype = "bfloat16"
-    batch_size = 8
-    use_compile = True
-    lr = 1e-4
-    total_optimizer_steps = 10000
-    num_worker = 2
+    # 数据与奖励模型
+    data_file: str = "data/rlaif.jsonl"
+    reward_model_path: str = "reward_model.pth"
+    max_length: int = 1024
+    max_new_tokens: int = 1000
+    is_reasoning: bool = False
+
+
+
+    # PPO 目标
+    clip_epsilon: float = 0.5
+    vf_coef: float = 0.5
+    kl_coef: float = 0.5
+    update_old_actor: int = 100
+
+
+
+    # 优化与训练批次
+    epochs: int = 1
+    batch_size: int = 8
+    accumulation_steps: int = 10
+    lr: float = 1e-4
+    grad_clip: float = 1.0
+    total_optimizer_steps: int = 10000
+    num_worker: int = 2
+    dtype: str = "bfloat16"
+
+
+
+    # 模型与运行环境
+    hidden_size: int = 512
+    use_moe: bool = True
+    use_compile: bool = True
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+
+    # 断点、保存与实验记录
+    save_dir: str = ""
+    save_weight: str = ""
+    use_resume: bool = True
+    save_interval: int = 1000
+    wandb_proj: str = "YuchenModel"
 
 class PPODataset(Dataset):
     def __init__(self,tokenizer,cfg:PPOConfig):
@@ -73,7 +89,7 @@ class PPODataset(Dataset):
         #遍历原始对话列表
         for i,turn in enumerate(conversation):
             #根据索引判断角色,默认偶数是user(0,2,4,..),奇数是assistant
-            role = "user " if i % 2 == 0 else "assistant"
+            role = "user" if i % 2 == 0 else "assistant"
             message.append({"role":role,"content":turn["content"]})
 
             #不断覆盖answer,当循环结束的时候,保存的就是对话列表的最后一句话
@@ -83,7 +99,7 @@ class PPODataset(Dataset):
             #使用tokenizer的chat_ template功能将历史对话格式化为单个字符串
         return self.tokenizer.apply_chat_template(
                 message[:-1], #除了最后一句话以外的所有对话
-                tokenizer = False,    #false表示返回字符串,而不是token id
+                tokenize = False,    #false表示返回字符串,而不是token id
                 add_generation_prompt=True  #True表示在字符串末尾自动加上让模型开始回答的提示(如:"assistant\n"
             ),answer
 
@@ -106,19 +122,28 @@ class CriticModel(YuchenModelCausalLLM):
     def __init__(self,param):
         super().__init__(param)
         #将原有的输出头替换为一个线性层,该线性层将隐藏状态映射为一个标量
-        self.lm_head = nn.Linear(param.d_model, 1)
+        self.value_head = nn.Linear(param.d_model, 1)
 
     def forward(self,input_ids = None,attention_mask = None,**kwargs):
+        """
+        因为送入网络的是一堆token ID,所以需要使用Embedding
+        """
+        if attention_mask is None:
+            if self.config.pad_token_id is None:
+                padding_mask = torch.ones_like(input_ids,dtype=torch.bool)
+            else:
+                padding_mask = (input_ids != self.config.pad_token_id)
 
-        output = self.model(input_ids, attention_mask)
-        hidden_state = self.model.norm(output[0])
+        input_token = self.embd(input_ids)
+        input_token = input_token
+        hidden_state,_,_ = self.model(input_token,padding_mask = padding_mask)
 
-        value = self.lm_head(hidden_state).squeeze(-1) #B L 1 --> B L
+        #B L D --> B L 1 --> B L
+        hidden_state = self.value_head(hidden_state).squeeze(-1)
 
-        return value
+        return hidden_state
 
-
-def calculate_rewards(prompts,responses,reward_model,reward_tokenizer):
+def calculate_rewards(prompts,responses,reward_model,reward_tokenizer,device):
     """
     整合所有奖励函数的总奖励
     """
@@ -150,7 +175,7 @@ def calculate_rewards(prompts,responses,reward_model,reward_tokenizer):
             else:
                 format_reward.append(0.0)
 
-        rewards += torch.tensor(format_reward,device=rewards.device)
+        rewards += torch.tensor(format_reward,device=device)
 
 
 
@@ -169,13 +194,13 @@ def calculate_rewards(prompts,responses,reward_model,reward_tokenizer):
             return reward
         #计算response中获得的所有奖励
         mark_reward = [mark_num(response) for response in responses]
-        rewards += torch.tensor(mark_reward,device=rewards.device)
+        rewards += torch.tensor(mark_reward,device=device)
         return rewards
 
 
 
     #初始化每个reward为0,维度为[B]
-    reward = torch.zeros(len(responses))
+    reward = torch.zeros(len(responses),device=device)
     #如果是推理模型,先加入基于规则的奖励
     if cfg.is_reasoning:
         reward = reasoning_model_reward(reward)
@@ -226,7 +251,7 @@ def calculate_rewards(prompts,responses,reward_model,reward_tokenizer):
             reward_model_score.append(score)
 
         #转换为张量并累加到总奖励上
-        reward_model_score = torch.tensor(reward_model_score,device=reward.device)
+        reward_model_score = torch.tensor(reward_model_score,device=device)
         reward += reward_model_score
 
     return reward
@@ -292,12 +317,11 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
 
 
 
-
         #2.奖励与优势计算
         #第1步生成的回答给Reward Model进行打分
         #让critic model预测一下这个回答能得多少分
         #获取该batch生成的最终奖励 [B]
-        reward = calculate_rewards(prompts,response_text,reward_model,reward_tokenizer)
+        reward = calculate_rewards(prompts,response_text,reward_model,reward_tokenizer,device=cfg.device)
 
         #生成full_mask来区分实际token和padding
         full_mask  = (gen_out != tokenizer.pad_token_id).long()
@@ -308,7 +332,7 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
 
         #critic_model输出的是每个位置的state_value,但是每条样本最终只有一个奖励,因此需要从每个序列的多个state value中
         #选出一个代表完整回答结束后状态的的value,这里选用的是最后一个有效位置的state value
-        last_indices = (full_mask*torch.arange(full_mask.size(1),device=cfg.device)).argmax()
+        last_indices = (full_mask*torch.arange(full_mask.size(1),device=cfg.device)).argmax(dim=1) #B L,dim=1沿序列做
         #提取最后一个value作为整个回复的预测价值
         value = value_seq[torch.arange(gen_out.size(0)),last_indices]
 
@@ -332,7 +356,7 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
             #在generate阶段,我们只需要生成文本,不需要计算梯度("纯推理")速度块,显存占用少,等待句子生成完了之后,我们得到了完整的gen_out
             #此时把所有的句子作为一个完整的序列一次性的全部送给模型,Transformer 架构的优势就在于并行计算，这样只需一次前向传播就能得出所有 1000 个
             # token 的对数概率并构建好用于反向传播的计算图，效率远高于在生成时循环算 1000 次
-        with torch.no_grad():
+        with autocast_ctx:
             #将完整的序列输入到actor_model,获得完整的logits
             res = actor_model(input_ids = gen_out,attention_mask = full_mask)
             logits = res.logits #B P+R-1
@@ -352,7 +376,7 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
         #构造掩码,仅生成Response部分的logp计算,忽略Prompt和Padding部分
         #P+R-1
         seq_len = gen_out.size(1) - 1
-        resp_mask = torch.arange(len(seq_len),device = cfg.device).unsqueeze(0) >= prompt_length -1
+        resp_mask = torch.arange(seq_len,device = cfg.device).unsqueeze(0) >= prompt_length -1
         #rq表示相等,~取反表示不相等
         final_mask = resp_mask & (~label.eq(tokenizer.pad_token_id))
 
@@ -370,18 +394,16 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
         #   ref_model:用来防止模型为了拿高分而偏离基座模型太远,(比如无限重复某个高分词语),要求当前的策略不能偏离初始的策略太远
         with torch.no_grad():
             #旧策略模型(用于PPO重要性比率)
-            old_logits = old_actor_model(input_ids = gen_out,attention_mask = full_mask)
+            old_logits = old_actor_model(input_ids = gen_out,attention_mask = full_mask).logits
             #gether使用label中的token ID去索引每个位置上实际action的对数概率
-            old_logp_tokens = f.log_softmax(old_logits[:,1:],dim=-1).gather(2,label.unsqueeze(-1)).squeeze(-1)
+            old_logp_tokens = f.log_softmax(old_logits[:,:-1],dim=-1).gather(2,label.unsqueeze(-1)).squeeze(-1)
             old_logp = (old_logp_tokens*final_mask).sum(dim=-1)
 
 
             #参考模型(基座模型,用于防止策略过度偏移的KL,乘法计算)
-            ref_logits = ref_model(input_ids = gen_out,attention_mask = full_mask)
-            ref_logp_tokens = f.log_softmax(ref_logits[:,1:],dim=-1).gather(2,label.unsqueeze(-1)).squeeze(-1)
+            ref_logits = ref_model(input_ids = gen_out,attention_mask = full_mask).logits
+            ref_logp_tokens = f.log_softmax(ref_logits[:,:-1],dim=-1).gather(2,label.unsqueeze(-1)).squeeze(-1)
             ref_logp = (ref_logp_tokens*final_mask).sum(dim=-1)
-
-
 
 
 
@@ -407,9 +429,9 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
         surr1 = ratio*advantages
         #裁剪项,将ratio限制[1- epsilon , 1 + epsilon]之间
         #限制策略概率最多变化一定幅度,防止一次更新过大
-        surr2 = torch.clamp(ratio,1.0-cfg.clip_epsilon,1.0+cfg.clip_epsilon)
+        surr2 = torch.clamp(ratio,1.0-cfg.clip_epsilon,1.0+cfg.clip_epsilon)*advantages
         #ActorLoss负的最小话(即最大化目标函数)
-        policy_loss = -min(surr1,surr2).mean()
+        policy_loss = -torch.minimum(surr1,surr2).mean()
 
 
         #CriticLoss :预测的价值Value 与实际Reward 之间的均方误差
@@ -428,15 +450,15 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
 
         #6.参数更新
         #套路:梯度剪裁 ---> 优化器修改参数 ---> 调度器调整学习率 ---> 情况梯度开始下一轮
-        if (step+1)%cfg.accumulation_steps == 0:
+        if step%cfg.accumulation_steps == 0:
             #梯度剪裁,防止爆炸
             torch.nn.utils.clip_grad_norm_(actor_model.parameters(),cfg.grad_clip)
-            torch.nn.utils.clip_grad_norm_(actor_model.parameters(),cfg.grad_clip)
+            torch.nn.utils.clip_grad_norm_(critic_model.parameters(),cfg.grad_clip)
             actor_optimizer.step()
             critic_optimizer.step()
             critic_scheduler.step()
             #清空梯度
-            actor_optimizer.zero_gard()
+            actor_optimizer.zero_grad()
             critic_optimizer.zero_grad()
 
 
@@ -450,12 +472,11 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
             response_ids = gen_out[:,enc.input_ids.shape[1]:]
             is_eos = (response_ids == tokenizer.eos_token_id)
             eos_indices = torch.argmax(is_eos.int(),dim=1)
-            has_eos = eos_indices.any()
+            has_eos = eos_indices.any(dim=1)
             #torch.where(condition,A,B):条件成立,从A中取;条件不成立,从B中取
             #torch.where(condition)返回符合条件的元素的位置索引
             #如果有eos_id + 1:某条response实际生成到eos为止的长度
             avg_length = torch.where(has_eos,eos_indices+1,torch.tensor(response_ids.shape[1],device=is_eos.device))
-
 
             #取出各项指标用于打印日志
             actor_loss_val = policy_loss.item()
@@ -489,7 +510,7 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
 
 
         #8.模型状态同步
-        if(step+1)%cfg.update_old_actor == 0:
+        if step%cfg.update_old_actor == 0:
             raw_actor = actor_model.module if isinstance(actor_model,DistributedDataParallel) else actor_model
             raw_actor = getattr(raw_actor,"orig_mod",raw_actor)
             state_dict = raw_actor.state_dict()
@@ -576,16 +597,15 @@ if __name__ == "__main__":
 
 
     #3.设置混合精度
-    device_dtype = "cuda" if "cuda" in cfg else "cpu"
+    device_dtype = cfg.device
     dtype = torch.bfloat16 if cfg.dtype == "bfloat16" else torch.float16
     #通过 ContextManager 设置自动混合精度,提升训练速度和降低缓存
-    autocast_ctx = nullcontext if device_dtype == "cpu" else torch.cuda.amp.autocast(dtype=dtype)
+    autocast_ctx = nullcontext() if device_dtype == "cpu" else torch.cuda.amp.autocast(dtype=dtype)
 
 
 
 
     #4.配置wandb监控平台
-    wandb = None
     if cfg.use_resume and is_main_process() :
         wandb_id = ckp_data.get("wandb_id") if ckp_data else None
         resume = "must" if wandb_id else None
@@ -606,12 +626,12 @@ if __name__ == "__main__":
     #todo 1:old_actor模型
     #Old actor model(提供旧策略的概率用于重要性采样,不计算梯度)
     old_actor_model = None
-    old_actor_model = old_actor_model.eval().require_grad_(False)
+    old_actor_model = old_actor_model.eval().requires_grad_(False)
     #Reference Model(监督基线,用于计算KL散度,防止Actor退化,不计算梯度)
 
     #todo 2:reference模型
     ref_model = None
-    ref_model = ref_model.eval().require_grad_(False)
+    ref_model = ref_model.eval().requires_grad_(False)
     #critic_model(预测该状态能获得多少回报,独立更新权重)
     moe_suffix = 'moe' if cfg.use_moe else ""
     ckp = f"{cfg.save_dir}/{base_weight}_{cfg.hidden_size}{moe_suffix}.pth"
@@ -630,7 +650,7 @@ if __name__ == "__main__":
 
     #6.数据和优化器配置
     train_ds = PPODataset(tokenizer,cfg)
-    train_sampler = DistributedSampler if dist.is_initialized() else None
+    train_sampler = DistributedSampler(train_ds, shuffle=True) if dist.is_initialized() else None
 
     #critic_model 和 Actor_model分别使用独立的优化器
     actor_optimizer = optim.AdamW(actor_model.parameters(),lr=cfg.lr)
@@ -683,7 +703,7 @@ if __name__ == "__main__":
         #判断自己是否需要跳过已经训练的batch(断点续训)
         skip = start_step if (epoch == start_epoch) else 0
         batch_sampler = SkipBatchSimple(train_sampler or indices,batch=cfg.batch_size,skip_batch=skip)
-        loader = DataLoader(train_ds,batch_sampler,num_workers=cfg.num_worker,pin_memory=True)
+        loader = DataLoader(train_ds,num_workers=cfg.num_worker,pin_memory=True,batch_sampler = batch_sampler)
 
         #调用PPO训练逻辑
         if skip > 0:
