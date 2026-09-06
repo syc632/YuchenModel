@@ -307,8 +307,8 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
             model_for_gen = actor_model.module if isinstance(actor_model,DistributedDataParallel) else actor_model
             #actor_model根据prompt生成response
             #这里的gen_out是完整的序列:prompt + actor生成的response
-            gen_out = actor_model.generate(input_ids = enc.input_ids,attention_mask = enc.attention_mask,max_new_tokens = cfg.max_new_tokens,
-                                           do_sample = True,temperature = 0.9,pad_token_id = tokenizer.pad_token_id,eos_token_id = tokenizer.eos_token_id)
+            gen_out = model_for_gen.generate(input_ids = enc.input_ids,attention_mask = enc.attention_mask,max_new_tokens = cfg.max_new_tokens,
+                                           do_sample = True,temperature = 1.0,pad_token_id = tokenizer.pad_token_id,eos_token_id = tokenizer.eos_token_id)
 
         #将生成的token ID解码回纯文本(取出prompt部分)
         response_text = [tokenizer.decode(gen_out[i,prompt_length:]) for i in range(len(prompts))]
@@ -476,7 +476,8 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
             #torch.where(condition,A,B):条件成立,从A中取;条件不成立,从B中取
             #torch.where(condition)返回符合条件的元素的位置索引
             #如果有eos_id + 1:某条response实际生成到eos为止的长度
-            avg_length = torch.where(has_eos,eos_indices+1,torch.tensor(response_ids.shape[1],device=is_eos.device))
+            length = torch.where(has_eos,eos_indices+1,torch.tensor(response_ids.shape[1],device=is_eos.device))
+            avg_length = length.float().mean()
 
             #取出各项指标用于打印日志
             actor_loss_val = policy_loss.item()
@@ -546,6 +547,7 @@ def ppo_train_one_epoch(cfg:PPOConfig,loader,epoch,iter,old_actor_model,critic_m
             actor_model.train()
             #释放内存
             del actor_state
+
 
 
         #10.清理内存
