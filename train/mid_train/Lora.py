@@ -16,9 +16,9 @@ from pathlib import Path
 class LoraConfig:
     project_dir: Path = Path(r"D:\Kimi")
 
-    tokenizer_dir: str = "BPEmodel"  # 分词器
-    data_file: str = "data/lora_exam.jsonl"  # 训练数据
-    save_dir: str = "train/mid_train/weight/lora_weight"  # 保存目录/检查点
+    tokenizer_dir: str = ""  # 分词器
+    data_file: str = ""  # 训练数据
+    save_dir: str = ""  # 保存目录/检查点
 
     # None 表示使用全部数据；调试时可以设为 1000
     max_samples: int | None = 90000
