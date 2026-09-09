@@ -28,7 +28,9 @@ def main() -> None:
         layer_counts[group] += parameter.numel()
 
     print("Default Config parameter report")
-    print(f"  unique/trainable parameters: {total:,}")
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"  unique parameters: {total:,}")
+    print(f"  trainable parameters: {trainable:,}")
     print(f"  approximate fp32 weight memory: {total * 4 / 1024**2:.2f} MiB")
     print("  by component:")
     for group, count in sorted(layer_counts.items()):

@@ -2,6 +2,23 @@
 
 一款使用pytorch手写的从0到1训练的超轻量语言模型。
 
+## 当前预训练配置
+
+默认模型为8层、512维、8个头，按3 GDN + 1 MLA组成两个周期；保留潜空间MoE和AttnRes，专家中间维为704，潜空间维为128。新训练tokenizer的目标词表大小为8192。
+
+8192词表下总参数为47,237,392，可训练参数为47,237,376；共享embedding和输出头只计一次。预训练入口根据实际tokenizer大小构建模型，已有6400词表仍可使用，对应总参数46,319,888。新词表需要重新训练tokenizer，修改配置不会改变已保存的tokenizer。
+
+预训练默认长度512、batch size为2、梯度累积16步、1个epoch，使用全部输入样本。每次更新最多16,384个输入token（含padding，最后不足的batch除外），有效预测目标数更少。学习率3e-4、warmup比例3%、weight decay为0.1、梯度裁剪1.0，默认BF16，关闭compile。
+
+在 `train/pre_train/pretrain.py` 的 `TrainConfig` 中填写实际 `project_dir`、`tokenizer_dir` 和 `data_file` 后，从仓库根目录启动：
+
+```bash
+python test/report_parameter_count.py
+python -m train.pre_train.pretrain
+```
+
+默认 `resume=False`，从零初始化；输出到相对启动目录的 `weight/pretrain_gibc`。新配置与旧12层权重不兼容，首次训练请使用空输出目录。参数统计脚本报告默认词表配置，训练入口另外打印实际模型参数量。
+
 项目主要实现:  
 一.架构
 
@@ -77,3 +94,13 @@ Kimi团队3月份新作,把Attention作用于层和层之间,在Full Attention R
 
 
 
+
+## 模块对比实验
+
+八组受控消融、有效 token 预算训练、多种子确认、参数量对齐和报告生成的完整用法见 [实验工具链说明](experiments/README.md)。
+
+```bash
+python -m experiments.cli --help
+```
+
+模型通过 `attention_type`、`ffn_type`、`expert_ffn_type` 独立选择注意力、稠密 FFN 和专家 FFN。正式实验从零训练；`test/smoke_experiments.py` 仅用于在模拟数据上验证完整流程。

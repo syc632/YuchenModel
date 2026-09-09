@@ -25,7 +25,7 @@ class Config:
     conv_size: int = 4
     chunk_size: int = 64
     gate_rank: int | None = None
-    n_layer: int = 12
+    n_layer: int = 8  #两个3 GDN + 1 MLA周期，控制总参数量在50M以内
     ratio: int = 3  #线性Mixer层和MLA层的比例
     dropout: float = 0.0
     norm_eps: float = 1e-5
@@ -62,10 +62,10 @@ class Config:
     aux_loss_alpha: float = 0.01
     use_moe: bool = True
     d_latent:int = 128
-    d_inner:int = 768
+    d_inner:int = 704
 
     use_attn_res:bool = True
-    vocab_size:int = 6400
+    vocab_size:int = 8192  #训练时以实际tokenizer大小为准
     embd:int = 512
     pad_token_id: int | None = None
     bos_token_id: int | None = None

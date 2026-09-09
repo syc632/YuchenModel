@@ -21,7 +21,7 @@ class Mamba2Config:
 
 def _segment_sum(x: torch.Tensor) -> torch.Tensor:
     """
-    计算一个chunk内任意两个位置之间的累计和。
+    对于长度为Q的序列,计算任意“过去位置j”到“当前位置i”的log衰减,并生成一个因果掩码矩阵
 
     x: [..., Q]
     return: [..., Q, Q]，下三角位置(i,j)表示(j,i]之间的累计值。
@@ -61,7 +61,7 @@ class Mamba2(nn.Module):
         self.head_dim = cfg.head_dim
         self.d_state = cfg.mamba_d_state
         self.expand = cfg.mamba_expand
-        self.n_groups = cfg.mamba_n_groups
+        self.n_groups = cfg.mamba_n_groups  #把SSM head分成n个group 每个group内共享B和C
         self.conv_size = cfg.conv_size
         self.chunk_size = cfg.chunk_size
         self.norm_eps = cfg.norm_eps
@@ -86,6 +86,9 @@ class Mamba2(nn.Module):
         if self.n_heads % self.n_groups != 0:
             raise ValueError("Mamba2的head数量必须能被mamba_n_groups整除")
 
+
+        factory_kwargs = {"device": torch.device("cuda"), "dtype": torch.float32}
+
         # 投影顺序和官方实现相同：[z, x, B, C, dt]。
         # z和x各占d_inner，B/C按group共享，dt为每个head提供一个时间步长。
         projection_dim = (
@@ -93,8 +96,9 @@ class Mamba2(nn.Module):
             + 2 * self.n_groups * self.d_state
             + self.n_heads
         )
-        self.in_proj = nn.Linear(self.d_model, projection_dim, bias=False)
+        self.in_proj = nn.Linear(self.d_model, projection_dim, bias=False,**factory_kwargs)
 
+        #只有x,B,C进入短卷积计算
         self.conv_dim = self.d_inner + 2 * self.n_groups * self.d_state
         self.conv1d = nn.Conv1d(
             self.conv_dim,

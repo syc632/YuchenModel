@@ -33,7 +33,7 @@ def train_tokenizer():
 
     #HuggingFace的训练器对象,驱动BPE算法的训练过程
     trainer = trainers.BpeTrainer(
-        vocab_size=6400,
+        vocab_size=8192,
         min_frequency=2,
         special_tokens=special_token,
         show_progress=True,#展示训练进度

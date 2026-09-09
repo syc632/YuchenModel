@@ -19,14 +19,14 @@ class TrainConfig:
 
     tokenizer_dir: str = ""
     data_file: str = ""
-    save_path: str = ""
+    save_path: str = "weight/pretrain_gibc"  #新配置单独保存，避免覆盖旧模型
 
     # None 表示使用全部数据；调试时可以设为 1000
-    max_samples: int | None = 20_000
+    max_samples: int | None = None
 
-    max_length: int = 256
+    max_length: int = 512
     batch_size: int = 2
-    accumulation_steps: int = 16
+    accumulation_steps: int = 16  #每次更新最多2*512*16=16384个输入token，含padding
     epochs: int = 1
 
     lr: float = 3e-4
@@ -45,8 +45,8 @@ class TrainConfig:
     # "bfloat16"、"float16" 或 "float32"
     dtype: str = "bfloat16"
 
-    # 是否加载 checkpoint
-    resume: bool = True
+    # 新配置从零开始训练，不加载旧架构checkpoint
+    resume: bool = False
 
     use_wandb: bool = True
     project_name:str = "YuchenModel"
