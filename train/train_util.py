@@ -96,16 +96,16 @@ def lm_check_point(lm_config,weight:str=None,model=None,optimizer=None,epoch=Non
         raw_model = getattr(raw_model,"_orig_mod",raw_model)
         #state_dict()用来获取模型或优化器当前的状态
         #state_dict是模型内部的"参数名:参数数值"字典,保存的是模型在训练中学习到的数值
-        state_dict = raw_model.state_dict()
-        #转为半精度并移到CPU,节省磁盘空间并且不占用显存
-        state_dict = {
-            k:(v.half() if v.is_floating_point() else v).cpu()
-            for k,v in state_dict.items()
+        #恢复训练保留原始精度；只有单独导出的推理权重压缩为FP16。
+        state_dict = {k: v.detach().cpu() for k, v in raw_model.state_dict().items()}
+        inference_state = {
+            k: v.half() if v.is_floating_point() else v
+            for k, v in state_dict.items()
         }
 
         #原子保存,先写临时文件,确认临时文件完整写入,再替换旧文件
         ckp_tmp = check_path+".tmp"
-        torch.save(state_dict,ckp_tmp)
+        torch.save(inference_state,ckp_tmp)
         retry(ckp_tmp, check_path)
 
         wandb_id = None
@@ -130,7 +130,7 @@ def lm_check_point(lm_config,weight:str=None,model=None,optimizer=None,epoch=Non
         retry(resume_tmp, resume_path)
 
         #显式删除较大的临时对象并清理显存缓存
-        del state_dict, resume_data
+        del state_dict, inference_state, resume_data
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 

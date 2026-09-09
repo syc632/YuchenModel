@@ -8,7 +8,11 @@
 
 8192词表下总参数为47,237,392，可训练参数为47,237,376；共享embedding和输出头只计一次。预训练入口根据实际tokenizer大小构建模型，已有6400词表仍可使用，对应总参数46,319,888。新词表需要重新训练tokenizer，修改配置不会改变已保存的tokenizer。
 
-预训练默认长度512、batch size为2、梯度累积16步、1个epoch，使用全部输入样本。每次更新最多16,384个输入token（含padding，最后不足的batch除外），有效预测目标数更少。学习率3e-4、warmup比例3%、weight decay为0.1、梯度裁剪1.0，默认BF16，关闭compile。
+预训练默认长度512、batch size为2、梯度累积16步、1个epoch，不限制输入样本数量。每次更新最多16,384个输入token（含padding，最后不足的batch除外），有效预测目标数更少。累积梯度按实际有效预测token数归一化，包含尾部不足16批的更新；MoE辅助损失也按微批的有效预测token数加权。学习率3e-4、warmup比例3%、weight decay为0.1、梯度裁剪1.0，关闭compile。
+
+训练主权重保持FP32，CUDA默认通过autocast执行BF16前向；`dtype="float32"`关闭AMP，`dtype="float16"`启用FP16和GradScaler。CPU使用FP32，不支持BF16的GPU需要显式选择FP16或FP32。
+
+验证集默认由`val_ratio=0.01`、`val_seed=2026`从输入样本固定划分，至少留出一条，训练样本不会包含验证索引。也可设置`val_file="data/validation.jsonl"`使用独立文件，此时不从训练文件划分。划分按样本索引进行，语料去重仍需在数据准备阶段完成。每`eval_interval=100`次成功更新及epoch结束评估一次，按有效预测目标加权统计CE和PPL，不包含MoE辅助损失。记录追加到`validation.jsonl`，验证CE改善时更新最佳权重。
 
 在 `train/pre_train/pretrain.py` 的 `TrainConfig` 中填写实际 `project_dir`、`tokenizer_dir` 和 `data_file` 后，从仓库根目录启动：
 
@@ -18,6 +22,17 @@ python -m train.pre_train.pretrain
 ```
 
 默认 `resume=False`，从零初始化；输出到相对启动目录的 `weight/pretrain_gibc`。新配置与旧12层权重不兼容，首次训练请使用空输出目录。参数统计脚本报告默认词表配置，训练入口另外打印实际模型参数量。
+
+默认512维MoE配置产生以下文件：
+
+- `pretrain_weight_512_moe_resume.pth`：用于恢复，保留原始精度的模型参数、优化器、Scaler、训练位置、随机状态和最佳验证CE；每`save_interval=100`次成功更新及epoch结束保存。
+- `pretrain_weight_512_moe.pth`：单独导出的FP16推理权重。
+- `pretrain_best_512_moe.pth`及`pretrain_best_512_moe_resume.pth`：验证CE最低时的推理权重和完整状态。
+- `train_config.json`、`validation.jsonl`：本次训练配置与验证记录。
+
+续训时保持数据、tokenizer和训练配置一致，将`resume=True`并指向原`save_path`。恢复入口与保存统一使用`pretrain_weight`前缀，缺少checkpoint时会明确报错。旧checkpoint若已经压缩为FP16，加载后无法还原此前丢失的精度。
+
+针对性回归检查：`python -m unittest discover -s test -p 'test_pretrain_training.py' -v`。CPU测试覆盖累积梯度、验证统计、checkpoint精度、最佳权重和中断恢复；GPU可用时额外运行CUDA精度检查。
 
 项目主要实现:  
 一.架构

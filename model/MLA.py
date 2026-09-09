@@ -115,7 +115,7 @@ class MLA(nn.Module):
         q = torch.cat([q_nope, q_rope], dim=-1).transpose(1, 2)
 
         attention_mask = self.create_causal_mask(total_len=total_len,past_len=past_len,key_padding_mask=key_padding_mask)
-        attention_mask = attention_mask.to(x.device,x.dtype)
+        attention_mask = attention_mask.to(x.device,torch.bool)
 
 
         #MHA
