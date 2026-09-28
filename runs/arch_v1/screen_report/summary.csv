@@ -1,0 +1,9 @@
+cohort,stage,name,seeds,n_seeds,n_test_seeds,tokens,validation_ce_mean,validation_ce_sd,test_ce_mean,test_ce_sd,test_ppl_mean,test_ppl_sd,parameters,active_parameters_estimate,train_seconds_mean,train_seconds_sd,peak_memory_bytes_mean,decode_ms_512_mean,decode_ms_512_sd,paired_ce_delta_mean,paired_ce_delta_sd,skipped_updates,interpretation
+75e7e0be8645,screen,A1,42,1,0,10000000,5.317540287194252,,,,,,47646848,34670720,1243.0716563982423,,4695234560,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,A2,42,1,0,10000000,5.444199836184501,,,,,,48417168,35441040,1193.2016775989905,,4755529728,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,B,42,1,0,10000000,5.449248953335285,,,,,,47237392,34261264,1212.3785694993567,,4677366272,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,F1,42,1,0,10000000,5.698464534580707,,,,,,20232976,20232976,584.678737199516,,3053746688,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,F2,42,1,0,10000000,5.6842177046618465,,,,,,20227344,20227344,597.1199980996316,,3148065280,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,F3,42,1,0,10000000,5.45114093601799,,,,,,47293712,34283792,1195.3570244995644,,4308526080,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,M,42,1,0,10000000,5.194775012644053,,,,,,50727712,37751584,952.0797696964582,,4820562432,,,,,0,single_seed_exploratory
+75e7e0be8645,screen,R,42,1,0,10000000,6.555883170425177,,,,,,47237392,34261264,1291.4471476991894,,4511973376,,,,,0,single_seed_exploratory

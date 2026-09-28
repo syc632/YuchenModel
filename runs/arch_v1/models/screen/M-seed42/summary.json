@@ -1,0 +1,21 @@
+{
+  "name": "M",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "e9a1d952e45bd4f0de64cc17db0931e6519c1949acaeb89feb31a1a4876d6eb4",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.194775012644053,
+    "ppl": 180.3275668101779,
+    "targets": 2000000,
+    "nll_sum": 10389550.025288105,
+    "status": "ok"
+  },
+  "parameters": 50727712,
+  "trainable_parameters": 50727696,
+  "active_parameters_estimate": 37751584,
+  "train_seconds": 952.0797696964582,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 4820562432
+}

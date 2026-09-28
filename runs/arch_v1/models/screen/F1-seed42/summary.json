@@ -1,0 +1,21 @@
+{
+  "name": "F1",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "534341f7ee62ea079a4df83fd0681f9fdbda0dcdd04a025bf0814ad692531415",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.698464534580707,
+    "ppl": 298.40885254063886,
+    "targets": 2000000,
+    "nll_sum": 11396929.069161415,
+    "status": "ok"
+  },
+  "parameters": 20232976,
+  "trainable_parameters": 20232960,
+  "active_parameters_estimate": 20232976,
+  "train_seconds": 584.678737199516,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 3053746688
+}

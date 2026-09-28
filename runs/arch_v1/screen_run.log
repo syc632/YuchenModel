@@ -1,0 +1,98 @@
+Checking B ...
+Checking M ...
+Checking A1 ...
+Checking A2 ...
+Checking F1 ...
+Checking F2 ...
+Checking F3 ...
+Checking R ...
+{'B': 'ready', 'M': 'ready', 'A1': 'ready', 'A2': 'ready', 'F1': 'ready', 'F2': 'ready', 'F3': 'ready', 'R': 'ready'}
+Timing B, seq_len=512 ...
+Timing M, seq_len=512 ...
+Timing A1, seq_len=512 ...
+Timing A2, seq_len=512 ...
+Timing F1, seq_len=512 ...
+Timing F2, seq_len=512 ...
+Timing F3, seq_len=512 ...
+Timing R, seq_len=512 ...
+Frozen screen budget: 10,000,000 effective targets per run
+B seed=42 tokens=1000000/10000000 val_ce=7.15611
+B seed=42 tokens=2000000/10000000 val_ce=6.55929
+B seed=42 tokens=3000000/10000000 val_ce=6.15522
+B seed=42 tokens=4000000/10000000 val_ce=5.91934
+B seed=42 tokens=5000000/10000000 val_ce=5.74925
+B seed=42 tokens=6000000/10000000 val_ce=5.63604
+B seed=42 tokens=7000000/10000000 val_ce=5.55658
+B seed=42 tokens=8000000/10000000 val_ce=5.50434
+B seed=42 tokens=9000000/10000000 val_ce=5.47045
+B seed=42 tokens=10000000/10000000 val_ce=5.44925
+M seed=42 tokens=1000000/10000000 val_ce=6.84015
+M seed=42 tokens=2000000/10000000 val_ce=6.19418
+M seed=42 tokens=3000000/10000000 val_ce=5.85802
+M seed=42 tokens=4000000/10000000 val_ce=5.63164
+M seed=42 tokens=5000000/10000000 val_ce=5.47324
+M seed=42 tokens=6000000/10000000 val_ce=5.37263
+M seed=42 tokens=7000000/10000000 val_ce=5.29680
+M seed=42 tokens=8000000/10000000 val_ce=5.24848
+M seed=42 tokens=9000000/10000000 val_ce=5.21533
+M seed=42 tokens=10000000/10000000 val_ce=5.19478
+A1 seed=42 tokens=1000000/10000000 val_ce=6.90631
+A1 seed=42 tokens=2000000/10000000 val_ce=6.28514
+A1 seed=42 tokens=3000000/10000000 val_ce=5.95444
+A1 seed=42 tokens=4000000/10000000 val_ce=5.73805
+A1 seed=42 tokens=5000000/10000000 val_ce=5.58529
+A1 seed=42 tokens=6000000/10000000 val_ce=5.48599
+A1 seed=42 tokens=7000000/10000000 val_ce=5.41467
+A1 seed=42 tokens=8000000/10000000 val_ce=5.36968
+A1 seed=42 tokens=9000000/10000000 val_ce=5.33753
+A1 seed=42 tokens=10000000/10000000 val_ce=5.31754
+A2 seed=42 tokens=1000000/10000000 val_ce=7.15080
+A2 seed=42 tokens=2000000/10000000 val_ce=6.54845
+A2 seed=42 tokens=3000000/10000000 val_ce=6.14983
+A2 seed=42 tokens=4000000/10000000 val_ce=5.91467
+A2 seed=42 tokens=5000000/10000000 val_ce=5.74427
+A2 seed=42 tokens=6000000/10000000 val_ce=5.63102
+A2 seed=42 tokens=7000000/10000000 val_ce=5.55233
+A2 seed=42 tokens=8000000/10000000 val_ce=5.49930
+A2 seed=42 tokens=9000000/10000000 val_ce=5.46528
+A2 seed=42 tokens=10000000/10000000 val_ce=5.44420
+F1 seed=42 tokens=1000000/10000000 val_ce=7.29668
+F1 seed=42 tokens=2000000/10000000 val_ce=6.72636
+F1 seed=42 tokens=3000000/10000000 val_ce=6.36346
+F1 seed=42 tokens=4000000/10000000 val_ce=6.13578
+F1 seed=42 tokens=5000000/10000000 val_ce=5.97924
+F1 seed=42 tokens=6000000/10000000 val_ce=5.87539
+F1 seed=42 tokens=7000000/10000000 val_ce=5.80249
+F1 seed=42 tokens=8000000/10000000 val_ce=5.75202
+F1 seed=42 tokens=9000000/10000000 val_ce=5.72066
+F1 seed=42 tokens=10000000/10000000 val_ce=5.69846
+F2 seed=42 tokens=1000000/10000000 val_ce=7.30415
+F2 seed=42 tokens=2000000/10000000 val_ce=6.69978
+F2 seed=42 tokens=3000000/10000000 val_ce=6.35225
+F2 seed=42 tokens=4000000/10000000 val_ce=6.12577
+F2 seed=42 tokens=5000000/10000000 val_ce=5.97082
+F2 seed=42 tokens=6000000/10000000 val_ce=5.86543
+F2 seed=42 tokens=7000000/10000000 val_ce=5.78985
+F2 seed=42 tokens=8000000/10000000 val_ce=5.73852
+F2 seed=42 tokens=9000000/10000000 val_ce=5.70597
+F2 seed=42 tokens=10000000/10000000 val_ce=5.68422
+F3 seed=42 tokens=1000000/10000000 val_ce=7.16998
+F3 seed=42 tokens=2000000/10000000 val_ce=6.56018
+F3 seed=42 tokens=3000000/10000000 val_ce=6.15607
+F3 seed=42 tokens=4000000/10000000 val_ce=5.92218
+F3 seed=42 tokens=5000000/10000000 val_ce=5.75597
+F3 seed=42 tokens=6000000/10000000 val_ce=5.64359
+F3 seed=42 tokens=7000000/10000000 val_ce=5.56073
+F3 seed=42 tokens=8000000/10000000 val_ce=5.50792
+F3 seed=42 tokens=9000000/10000000 val_ce=5.47284
+F3 seed=42 tokens=10000000/10000000 val_ce=5.45114
+R seed=42 tokens=1000000/10000000 val_ce=7.31685
+R seed=42 tokens=2000000/10000000 val_ce=7.30798
+R seed=42 tokens=3000000/10000000 val_ce=7.30592
+R seed=42 tokens=4000000/10000000 val_ce=7.29790
+R seed=42 tokens=5000000/10000000 val_ce=7.08344
+R seed=42 tokens=6000000/10000000 val_ce=6.80533
+R seed=42 tokens=7000000/10000000 val_ce=6.67497
+R seed=42 tokens=8000000/10000000 val_ce=6.61322
+R seed=42 tokens=9000000/10000000 val_ce=6.57899
+R seed=42 tokens=10000000/10000000 val_ce=6.55588

@@ -1,121 +1,111 @@
 # YuchenModel
 
-一款使用pytorch手写的从0到1训练的超轻量语言模型。
+一个用 PyTorch 手写、从零训练的轻量语言模型项目。当前工作聚焦于：在约 47M 参数的规模下，组合线性递推、潜空间注意力、MoE 和跨层残差，并通过受控实验判断各模块是否真正带来收益。
 
-## 当前预训练配置
+## 动机
 
-默认模型为8层、512维、8个头，按3 GDN + 1 MLA组成两个周期；保留潜空间MoE和AttnRes，专家中间维为704，潜空间维为128。新训练tokenizer的目标词表大小为8192。
+小模型的参数和单卡算力有限，不能只凭模块的理论优势决定架构。Gated DeltaNet（GDN）提供递推状态流式和缓存，MLA 提供全局信息交互，Stable Latent MoE 增加专家容量，AttnRes 融合一个周期内的层输出；这些设计也可能增加训练成本、推理延迟或不稳定性。本项目先建立可复现的 baseline，再逐项比较验证 CE、参数量和速度。
 
-8192词表下总参数为47,237,392，可训练参数为47,237,376；共享embedding和输出头只计一次。预训练入口根据实际tokenizer大小构建模型，已有6400词表仍可使用，对应总参数46,319,888。新词表需要重新训练tokenizer，修改配置不会改变已保存的tokenizer。
+项目还实现了 Mamba2、NoPE MLA、Embedding Gated MLA、SwiGLU 和 SiTUGLU，作为同一实验框架下的候选模块。训练代码覆盖预训练、LoRA／全参微调和 On Policy Distillation；下文的结果只讨论预训练与架构消融。
 
-预训练默认长度512、batch size为2、梯度累积16步、1个epoch，不限制输入样本数量。每次更新最多16,384个输入token（含padding，最后不足的batch除外），有效预测目标数更少。累积梯度按实际有效预测token数归一化，包含尾部不足16批的更新；MoE辅助损失也按微批的有效预测token数加权。学习率3e-4、warmup比例3%、weight decay为0.1、梯度裁剪1.0，关闭compile。
+## Baseline
 
-训练主权重保持FP32，CUDA默认通过autocast执行BF16前向；`dtype="float32"`关闭AMP，`dtype="float16"`启用FP16和GradScaler。CPU使用FP32，不支持BF16的GPU需要显式选择FP16或FP32。
+**模型 B（默认架构）**：8 层、隐藏维 512、8 个注意力头，以 `3 × GDN + 1 × MLA` 为一个周期，共两个周期；使用 Stable Latent MoE（8 个路由专家、每 token 选 2 个，另有 2 个共享专家，专家中间维 704、潜空间维 128）和 AttnRes。词嵌入与输出头共享权重。GDN 的 chunk 路径用于训练，递推状态和卷积状态用于增量生成；MLA 使用潜空间 KV 和部分 RoPE。默认配置以 8192 词表计算有 47,237,392 个参数，其中 47,237,376 个可训练；训练入口会按实际 tokenizer 大小构建模型。
 
-验证集默认由`val_ratio=0.01`、`val_seed=2026`从输入样本固定划分，至少留出一条，训练样本不会包含验证索引。也可设置`val_file="data/validation.jsonl"`使用独立文件，此时不从训练文件划分。划分按样本索引进行，语料去重仍需在数据准备阶段完成。每`eval_interval=100`次成功更新及epoch结束评估一次，按有效预测目标加权统计CE和PPL，不包含MoE辅助损失。记录追加到`validation.jsonl`，验证CE改善时更新最佳权重。
+**当前预训练记录的配置**：本地 `train/pre_train/weight/pretrain_gibc/train_config.json` 记录了长度 512、batch size 10、梯度累积 16、1 个 epoch、学习率 `3e-4`、BF16 autocast、FP32 主权重和关闭 `torch.compile`。每次完整更新最多处理 81,920 个输入 token（含 padding），有效预测 token 数更少。验证集按样本索引固定划出 1%（seed 2026）；验证 CE/PPL 按有效预测目标加权，且不含 MoE 辅助损失。
 
-在 `train/pre_train/pretrain.py` 的 `TrainConfig` 中填写实际 `project_dir`、`tokenizer_dir` 和 `data_file` 后，从仓库根目录启动：
+本地 `train/pre_train/weight/pretrain_gibc/validation.jsonl` 在第 4,863 次更新、epoch 结束时记录验证 CE **3.6365**、PPL **37.96**（3,459,294 个预测目标）。这些训练记录当前未纳入版本控制；这是单次预训练的验证结果，不是下文受控消融的 B 组成绩，也不能与其他配置直接比较。
+
+运行前，在 `train/pre_train/pretrain.py` 的 `TrainConfig` 中检查 `project_dir`、`tokenizer_dir`、`data_file` 和 `save_path`。首次训练须设 `resume=False` 并使用空输出目录；续训时设为 `True` 并指向已有恢复权重。新 tokenizer 要重新训练，修改 `vocab_size` 不会改变已有 tokenizer；旧 12 层权重也不能直接用于当前 8 层模型。
 
 ```bash
 python test/report_parameter_count.py
 python -m train.pre_train.pretrain
 ```
 
-默认 `resume=False`，从零初始化；输出到相对启动目录的 `weight/pretrain_gibc`。新配置与旧12层权重不兼容，首次训练请使用空输出目录。参数统计脚本报告默认词表配置，训练入口另外打印实际模型参数量。
+预训练在 `save_path` 下写入 `train_config.json`、`validation.jsonl`，以及 `pretrain_weight_512_moe_resume.pth` 等恢复权重和 FP16 推理权重；验证 CE 改善时另存 `pretrain_best_*`。恢复训练应保持数据、tokenizer 和模型配置一致。相关入口见 [`train/pre_train/pretrain.py`](train/pre_train/pretrain.py)。
 
-默认512维MoE配置产生以下文件：
+## 实验表
 
-- `pretrain_weight_512_moe_resume.pth`：用于恢复，保留原始精度的模型参数、优化器、Scaler、训练位置、随机状态和最佳验证CE；每`save_interval=100`次成功更新及epoch结束保存。
-- `pretrain_weight_512_moe.pth`：单独导出的FP16推理权重。
-- `pretrain_best_512_moe.pth`及`pretrain_best_512_moe_resume.pth`：验证CE最低时的推理权重和完整状态。
-- `train_config.json`、`validation.jsonl`：本次训练配置与验证记录。
+`runs/arch_v1` 已完成 [`experiments/config.py`](experiments/config.py) 定义的全部 8 组单项筛选。以下数值来自各组的 `summary.json`、`metrics.json`，并与 [`筛选汇总`](runs/arch_v1/screen_report/summary.json) 核对；实验阶段为 `screen`，`smoke=false`，全部运行状态为 `complete`，跳过的优化器更新均为 0。**本轮只有一个随机种子，结果属于探索性证据。** 上节完整预训练的 CE 3.6365 使用不同训练预算和验证协议，不混入本轮比较。
 
-续训时保持数据、tokenizer和训练配置一致，将`resume=True`并指向原`save_path`。恢复入口与保存统一使用`pretrain_weight`前缀，缺少checkpoint时会明确报错。旧checkpoint若已经压缩为FP16，加载后无法还原此前丢失的精度。
+### 本轮实验协议
 
-针对性回归检查：`python -m unittest discover -s test -p 'test_pretrain_training.py' -v`。CPU测试覆盖累积梯度、验证统计、checkpoint精度、最佳权重和中断恢复；GPU可用时额外运行CUDA精度检查。
+- **数据与随机种子**：共用 `data/arch_v1` 的数据切分和 8192 词表 tokenizer，训练 seed 为 42，数据 seed 为 2026；各组记录的数据、代码和环境指纹一致。
+- **训练预算**：每组从初始化开始训练 **10,000,000 个有效预测目标**，不计 padding 和被忽略的标签；序列长度 512，micro batch 8，每次更新的目标预算 `tokens_per_update=16,384`。每累计 1,000,000 个有效目标验证一次，共 10 个验证点。
+- **优化与精度**：AdamW，学习率 `3e-4`，warmup 比例 3%，最低学习率比例 0.1，weight decay 0.1，梯度裁剪 1.0；BF16 autocast。
+- **验证口径**：每次按固定顺序评估验证集前 **2,000,000 个有效预测目标**，按目标数加权计算语言模型 CE，不含 MoE 辅助损失；PPL 为 `exp(CE)`。下表报告 1000 万训练目标处的最终验证值。
+- **记录环境**：NVIDIA GeForce RTX 5060 Laptop GPU，Python 3.11.15，PyTorch `2.12.1+cu132`，CUDA 13.2。完整配置见 [`screen.json`](runs/arch_v1/screen.json)，预检记录见 [`preflight_mb8_eval2m.json`](runs/arch_v1/preflight_mb8_eval2m.json)；8 组均通过预检，包含 100 步小样本拟合检查。
 
-项目主要实现:  
-一.架构
+### 验证结果
 
-1.GDN及其分块并行算法
+CE、PPL 越低越好；`ΔCE = 本组 CE − B 组 CE`，负值表示本轮优于基线。参数量为总参数量，包含共享嵌入与输出头。
 
-2.Stable Latent MoE  
+| 组别 | 相对 B 的配置 | 验证 CE | ΔCE | 验证 PPL | 总参数量 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| B | GDN + MLA + Stable Latent MoE（专家 SiTUGLU）+ AttnRes | 5.4492 | 0.0000 | 232.58 | 47,237,392 |
+| M | GDN → Mamba2 | **5.1948** | **−0.2545** | **180.33** | 50,727,712 |
+| A1 | MLA → NoPE MLA | 5.3175 | −0.1317 | 203.88 | 47,646,848 |
+| A2 | MLA → Embedding Gated MLA | 5.4442 | −0.0050 | 231.41 | 48,417,168 |
+| F1 | MoE → 稠密 SwiGLU | 5.6985 | +0.2492 | 298.41 | 20,232,976 |
+| F2 | MoE → 稠密 SiTUGLU | 5.6842 | +0.2350 | 294.19 | 20,227,344 |
+| F3 | MoE 专家 SiTUGLU → SwiGLU | 5.4511 | +0.0019 | 233.02 | 47,293,712 |
+| R | 关闭 AttnRes | 6.5559 | +1.1066 | 703.37 | 47,237,392 |
 
-3.SiTU_GLU  
+**测试 CE/PPL 和推理延迟：8 组均尚未评估。** 当前目录中没有多种子确认、同参数量稠密对照或组合方案的完成记录。
 
-4.Block Attention Residual  
+### 训练成本
 
-5.Embedding_gating_MLA  
+训练耗时取 `summary.json` 的 `train_seconds`，累计数据取批、前向、反向和优化器更新的时间，不含验证、保存权重和 W&B 日志写入。平均吞吐按 `10,000,000 / train_seconds` 计算，单位为有效预测目标/s；它与 `screen.json` 中训练前的短程校准吞吐是不同统计。运行耗时取 `metrics.json` 的 `wall_seconds`，包含验证及已发生的保存与日志开销，但最后一次保存发生在最后一个计时点之后。峰值显存取 `torch.cuda.max_memory_allocated`，按 GiB（2³⁰ 字节）换算，包含训练和验证期间的分配，不等于显卡总占用。
 
-6.Nope MLA
+| 组别 | 训练耗时（分钟） | 运行耗时（分钟） | 平均训练吞吐（有效目标/s） | 峰值分配显存（GiB） |
+| --- | ---: | ---: | ---: | ---: |
+| B | 20.21 | 31.20 | 8,248 | 4.36 |
+| M | 15.87 | 24.47 | 10,503 | 4.49 |
+| A1 | 20.72 | 31.74 | 8,045 | 4.37 |
+| A2 | 19.89 | 30.69 | 8,381 | 4.43 |
+| F1 | 9.74 | 16.17 | 17,103 | 2.84 |
+| F2 | 9.95 | 16.42 | 16,747 | 2.93 |
+| F3 | 19.92 | 30.46 | 8,366 | 4.01 |
+| R | 21.52 | 33.31 | 7,743 | 4.20 |
 
-7.MLA
+同有效目标预算、同隐藏维度不等于同参数量或同计算量。这些耗时是本轮运行的实测值，尚未通过重复测速估计波动；不能据此推断推理速度。
 
-8.DeepSeekSpareAttention
+### 验证曲线与原始记录
 
-9.mamba2
+![验证 CE 随有效训练目标数变化](runs/arch_v1/screen_report/ce_vs_tokens.png)
 
-二.训练
+![验证 CE 随运行耗时变化](runs/arch_v1/screen_report/ce_vs_hours.png)
 
-1.pretrain
+第二张图使用 `wall_seconds`，包含验证等运行开销，与上表的纯训练耗时不同。轻量实验记录与图表位于 `runs/arch_v1`，包括 [`自动报告`](runs/arch_v1/screen_report/report.md)、[`CSV 汇总`](runs/arch_v1/screen_report/summary.csv)、[`训练日志`](runs/arch_v1/screen_run.log) 和 [`逐组运行目录`](runs/arch_v1/models/screen)；后者公开配置、验证轨迹和最终汇总，checkpoint 与训练数据保留在本地。
 
-2.midtrain:Lora + 全参微调
+实验记录中的 `source.git_commit` 和 `source.sha256` 对应跑实验时的本地代码快照，与本次只发布文档及结果的分支不同。重新训练需匹配原始代码、数据和 tokenizer，或重新预检并生成新的冻结计划；原计划会检查代码及数据指纹，不能直接用于不同快照。
 
-3.posttrain: On Policy Distillation
-
-
-## 核心架构
-
-### GDN
-
-主要思路包括：
-
-- 使用因果短卷积对局部 token 信息进行混合；
-- 使用门控衰减控制历史状态的遗忘速度；
-- 通过 Delta Rule 更新递推状态；
-- 使用 chunk 计算处理训练序列，并提供 recurrent 路径支持逐 token 推理；
-- 为流式生成保留卷积状态和递推状态，支持缓存复用。
-
-### MLA(Rope)
-
-MLA（Multi-head Latent Attention）通过潜空间压缩减少注意力中的表示和缓存开销：
-
-- 将 KV 表示压缩到 latent space，再恢复到多头表示；
-- 对 Q 和 KV 使用独立的 latent projection；
-- 仅对部分 query/key 维度应用 RoPE；
-
-### Stable Latent MoE
-
-NVIDIA团队首次发布于1月,核心做法就是在通信路由之前先经过一个**下投影矩阵**把向量压缩为一个低维的向量,经过路由门控把向量路由到不同的专家上,计算完再经过一个上投影变为正常矩阵
-而Kimi团队在新作KimiK3的时候又进一步改动,把专家网络换为了SiTiGLU,并且引入RMS解决数值不稳定的问题(详细见文档)
-
-
-### AttnRes
-
-Kimi团队3月份新作,把Attention作用于层和层之间,在Full Attention Residual的模式下,当前层的输出都会和前面所有层的输出计算一次注意力,等于是把每个层的隐藏向量当作token处理,这一点非常的想早期RNN和Attention结合的模型,当然如果查看原论文会发现他们的起点就是从RNN出发的
-
-默认配置中，KDA 与 MLA 按周期(3:1)交替使用；每个周期结束后可以执行一次 AttnRes 融合。这样可以在保留线性递推混合效率的同时，引入更强的全局信息交互能力。
-
-
-
-测试目录覆盖以下内容：
-
-- MLA 和 GDN 的完整序列/增量缓存一致性；
-- 大数值输入下的有限值和梯度稳定性；
-- Stable Latent MoE 的 Top-k 路由、padding、负载均衡损失和推理路径；
-- AttnRes 的加权结果和反向传播；
-- 模型输出、损失、梯度和参数量检查。
-
-
-
-
-
-## 模块对比实验
-
-八组受控消融、有效 token 预算训练、多种子确认、参数量对齐和报告生成的完整用法见 [实验工具链说明](experiments/README.md)。
+后续以验证 CE 选候选，通过多种子和参数对齐对照确认，再冻结候选并评估测试集与推理延迟。`--smoke` 只验证流程，不能作为架构收益的证据。
 
 ```bash
 python -m experiments.cli --help
 ```
 
-模型通过 `attention_type`、`ffn_type`、`expert_ffn_type` 独立选择注意力、稠密 FFN 和专家 FFN。正式实验从零训练；`test/smoke_experiments.py` 仅用于在模拟数据上验证完整流程。
+安装 `requirements-experiments.txt` 中的依赖后，可用公开的轻量记录重新生成报告，无需 checkpoint：
+
+```bash
+python -m experiments.cli report --runs runs/arch_v1/models --output runs/arch_v1/screen_report
+```
+
+训练和断点恢复的参数见 `run --help`。本轮本地训练入口还支持 W&B 日志扩展，该代码未随本次文档与结果发布；公开分支的示例使用现有 CLI 参数。
+
+## 消融
+
+- **混合器（M）**：保持 MLA 层和其余设置一致，将周期中的 GDN 替换为 Mamba2。本轮验证 CE 比 B 低 0.2545，训练耗时减少约 21.5%，是当前最有希望的单项候选；总参数量也从 47.24M 增至 50.73M，收益还需参数对齐和多种子确认。
+- **注意力（A1、A2）**：A1 的 NoPE MLA 比 B 低 0.1317 CE，训练耗时增加约 2.5%；A2 的 Embedding Gated MLA 仅低 0.0050 CE，单种子不足以确认这类小差异。A2 同时涉及位置编码与门控变化，不能把差异单独归因于门控。
+- **FFN／MoE（F1、F2、F3）**：F1、F2 将 MoE 换成稠密 FFN，总参数量降至约 20.23M，训练耗时约减半，但 CE 分别比 B 高 0.2492、0.2350；这体现本轮质量与成本的取舍，不能直接证明同参数量下 MoE 更好。F3 只替换 MoE 专家内部的 FFN，CE 比 B 高 0.0019，本轮未显示明确的质量优势。
+- **跨层残差（R）**：关闭 AttnRes 后，验证 CE 比 B 高 1.1066。验证轨迹在前 400 万训练目标处下降较慢，之后才明显改善；本轮支持保留 AttnRes，但尚不能据此断言更长训练预算下的最终差距。
+
+组合方案只有在单项筛选后重新训练、独立评估，才能判断实际效果；单项收益不能相加推断组合收益。实验工具提供同总参数量稠密对照、多种子确认和报告生成；详见 `experiments/cli.py` 的 `select`、`match`、`freeze`、`evaluate`、`report` 子命令。
+
+## 结论
+
+默认架构已完成一次完整预训练，验证 CE 为 **3.6365**；另一次独立的 1000 万有效目标、seed 42 筛选已完成全部 8 组对照，其中 B 的 CE 为 **5.4492**，M（Mamba2）的 **5.1948** 最低，A1（NoPE MLA）的 **5.3175** 次之。稠密 FFN 训练成本更低但本轮 CE 更高；关闭 AttnRes 的退化最明显。
+
+下一步优先对 B、M、A1 进行多种子确认和参数对齐比较；若尝试 Mamba2 + NoPE MLA 组合，需要重新训练并独立评估，不能将两个单项收益相加。最终架构仍应依据更长预算下的验证结果，以及冻结后的测试 CE、推理延迟和显存共同决定。

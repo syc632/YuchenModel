@@ -1,0 +1,21 @@
+{
+  "name": "R",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "c9dffde440aa42b6e29c89bcf58dfbe84c0c90ef4d6bbc2c423f3649fd95f9d8",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 6.555883170425177,
+    "ppl": 703.3700712377495,
+    "targets": 2000000,
+    "nll_sum": 13111766.340850353,
+    "status": "ok"
+  },
+  "parameters": 47237392,
+  "trainable_parameters": 47236352,
+  "active_parameters_estimate": 34261264,
+  "train_seconds": 1291.4471476991894,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 4511973376
+}

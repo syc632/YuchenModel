@@ -1,0 +1,214 @@
+{
+  "tokens": 10000000,
+  "updates": 563,
+  "skipped_updates": 0,
+  "train_seconds": 597.1199980996316,
+  "wall_seconds": 985.2326119999634,
+  "history": [
+    {
+      "tokens": 1000000,
+      "updates": 56,
+      "learning_rate": 0.000296545420827335,
+      "train_lm_loss": 7.275026886926637,
+      "aux_loss": 0.0,
+      "grad_norm": 0.4737006723880768,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 7.304146176208258,
+        "ppl": 1486.4502532816841,
+        "targets": 2000000,
+        "nll_sum": 14608292.352416515,
+        "status": "ok"
+      },
+      "train_seconds": 61.38887429982424,
+      "wall_seconds": 101.16971599997487,
+      "effective_tokens_per_second": 16289.596631402363,
+      "peak_memory_bytes": 3146000896
+    },
+    {
+      "tokens": 2000000,
+      "updates": 113,
+      "learning_rate": 0.0002800492711935558,
+      "train_lm_loss": 6.682981065767919,
+      "aux_loss": 0.0,
+      "grad_norm": 0.6430158615112305,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 6.699777253715515,
+        "ppl": 812.224884941123,
+        "targets": 2000000,
+        "nll_sum": 13399554.50743103,
+        "status": "ok"
+      },
+      "train_seconds": 118.9692510998575,
+      "wall_seconds": 199.40507179999258,
+      "effective_tokens_per_second": 16811.066569808772,
+      "peak_memory_bytes": 3147139584
+    },
+    {
+      "tokens": 3000000,
+      "updates": 169,
+      "learning_rate": 0.00025159010965020384,
+      "train_lm_loss": 6.269776065437998,
+      "aux_loss": 0.0,
+      "grad_norm": 0.5520129799842834,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 6.352247357239008,
+        "ppl": 573.7807514511834,
+        "targets": 2000000,
+        "nll_sum": 12704494.714478016,
+        "status": "ok"
+      },
+      "train_seconds": 177.60344880016055,
+      "wall_seconds": 297.1988464000169,
+      "effective_tokens_per_second": 16891.563875967302,
+      "peak_memory_bytes": 3147262464
+    },
+    {
+      "tokens": 4000000,
+      "updates": 225,
+      "learning_rate": 0.00021413347885951802,
+      "train_lm_loss": 6.050363384010181,
+      "aux_loss": 0.0,
+      "grad_norm": 0.5002346634864807,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 6.1257691295657155,
+        "ppl": 457.49645203269637,
+        "targets": 2000000,
+        "nll_sum": 12251538.259131432,
+        "status": "ok"
+      },
+      "train_seconds": 239.66432330012321,
+      "wall_seconds": 397.1764855000656,
+      "effective_tokens_per_second": 16690.010198100867,
+      "peak_memory_bytes": 3147262464
+    },
+    {
+      "tokens": 5000000,
+      "updates": 282,
+      "learning_rate": 0.0001715558999854505,
+      "train_lm_loss": 5.99433282856644,
+      "aux_loss": 0.0,
+      "grad_norm": 0.887227475643158,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.970819693471193,
+        "ppl": 391.82671695389985,
+        "targets": 2000000,
+        "nll_sum": 11941639.386942387,
+        "status": "ok"
+      },
+      "train_seconds": 299.6501452998491,
+      "wall_seconds": 495.24341240001377,
+      "effective_tokens_per_second": 16686.125731715165,
+      "peak_memory_bytes": 3148065280
+    },
+    {
+      "tokens": 6000000,
+      "updates": 339,
+      "learning_rate": 0.00012830294024809372,
+      "train_lm_loss": 5.789620876312256,
+      "aux_loss": 0.0,
+      "grad_norm": 1.0179580450057983,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.865428134720802,
+        "ppl": 352.6330982666857,
+        "targets": 2000000,
+        "nll_sum": 11730856.269441605,
+        "status": "ok"
+      },
+      "train_seconds": 358.822726899758,
+      "wall_seconds": 591.7016225999687,
+      "effective_tokens_per_second": 16721.348872854927,
+      "peak_memory_bytes": 3148065280
+    },
+    {
+      "tokens": 7000000,
+      "updates": 395,
+      "learning_rate": 8.886580097012762e-05,
+      "train_lm_loss": 5.808714059964339,
+      "aux_loss": 0.0,
+      "grad_norm": 0.7063451409339905,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.789845052465916,
+        "ppl": 326.96235843961284,
+        "targets": 2000000,
+        "nll_sum": 11579690.104931831,
+        "status": "ok"
+      },
+      "train_seconds": 418.74647229979746,
+      "wall_seconds": 691.0007752999663,
+      "effective_tokens_per_second": 16716.558736734667,
+      "peak_memory_bytes": 3148065280
+    },
+    {
+      "tokens": 8000000,
+      "updates": 451,
+      "learning_rate": 5.73668051042366e-05,
+      "train_lm_loss": 5.74809586279698,
+      "aux_loss": 0.0,
+      "grad_norm": 0.6446236371994019,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.738520782534361,
+        "ppl": 310.60461922157,
+        "targets": 2000000,
+        "nll_sum": 11477041.565068722,
+        "status": "ok"
+      },
+      "train_seconds": 476.1376166997943,
+      "wall_seconds": 788.4563483999809,
+      "effective_tokens_per_second": 16801.865089865427,
+      "peak_memory_bytes": 3148065280
+    },
+    {
+      "tokens": 9000000,
+      "updates": 507,
+      "learning_rate": 3.701876070590349e-05,
+      "train_lm_loss": 5.65048116023366,
+      "aux_loss": 0.0,
+      "grad_norm": 0.6896648406982422,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.705969797497272,
+        "ppl": 300.6569150330386,
+        "targets": 2000000,
+        "nll_sum": 11411939.594994545,
+        "status": "ok"
+      },
+      "train_seconds": 539.2862279998371,
+      "wall_seconds": 888.718349599978,
+      "effective_tokens_per_second": 16688.72582446648,
+      "peak_memory_bytes": 3148065280
+    },
+    {
+      "tokens": 10000000,
+      "updates": 563,
+      "learning_rate": 3.0000002481438182e-05,
+      "train_lm_loss": 5.676968964482118,
+      "aux_loss": 0.0,
+      "grad_norm": 0.5863490700721741,
+      "skipped_updates": 0,
+      "validation": {
+        "ce": 5.6842177046618465,
+        "ppl": 294.18761340944593,
+        "targets": 2000000,
+        "nll_sum": 11368435.409323692,
+        "status": "ok"
+      },
+      "train_seconds": 597.1199980996316,
+      "wall_seconds": 985.2326119999634,
+      "effective_tokens_per_second": 16747.052572055145,
+      "peak_memory_bytes": 3148065280
+    }
+  ],
+  "stream": {
+    "epoch": 0,
+    "position": 23504
+  },
+  "routing": {}
+}

@@ -1,0 +1,21 @@
+{
+  "name": "F3",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "cde6f95fd41a78f381d3c5e7a9cff6ef7a2246ad0a68157638b1c51ede10cdd0",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.45114093601799,
+    "ppl": 233.0238796349843,
+    "targets": 2000000,
+    "nll_sum": 10902281.87203598,
+    "status": "ok"
+  },
+  "parameters": 47293712,
+  "trainable_parameters": 47293696,
+  "active_parameters_estimate": 34283792,
+  "train_seconds": 1195.3570244995644,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 4308526080
+}

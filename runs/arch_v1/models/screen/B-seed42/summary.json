@@ -1,0 +1,21 @@
+{
+  "name": "B",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "a271858ddafc9ec73fd11f7e558ac0ef688bebdd4d2bba1cee3c0cda298bde59",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.449248953335285,
+    "ppl": 232.58341929311712,
+    "targets": 2000000,
+    "nll_sum": 10898497.90667057,
+    "status": "ok"
+  },
+  "parameters": 47237392,
+  "trainable_parameters": 47237376,
+  "active_parameters_estimate": 34261264,
+  "train_seconds": 1212.3785694993567,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 4677366272
+}

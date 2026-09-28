@@ -1,0 +1,21 @@
+{
+  "name": "F2",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "3bb76e4673e43a88c205c7c4b92a777517233df2c9a8ae14690d26d4fcfdedc5",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.6842177046618465,
+    "ppl": 294.18761340944593,
+    "targets": 2000000,
+    "nll_sum": 11368435.409323692,
+    "status": "ok"
+  },
+  "parameters": 20227344,
+  "trainable_parameters": 20227328,
+  "active_parameters_estimate": 20227344,
+  "train_seconds": 597.1199980996316,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 3148065280
+}

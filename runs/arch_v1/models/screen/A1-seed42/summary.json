@@ -1,0 +1,21 @@
+{
+  "name": "A1",
+  "seed": 42,
+  "stage": "screen",
+  "status": "complete",
+  "identity": "a2ece3ee0455bdac8cee1a42a462e35ddcc374d06f419f5c4eec33c2fd769718",
+  "tokens": 10000000,
+  "validation": {
+    "ce": 5.317540287194252,
+    "ppl": 203.881774114884,
+    "targets": 2000000,
+    "nll_sum": 10635080.574388504,
+    "status": "ok"
+  },
+  "parameters": 47646848,
+  "trainable_parameters": 47646848,
+  "active_parameters_estimate": 34670720,
+  "train_seconds": 1243.0716563982423,
+  "skipped_updates": 0,
+  "peak_memory_bytes": 4695234560
+}
